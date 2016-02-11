@@ -1,0 +1,45 @@
+name:                rayt
+category:            Graphics
+version:             0.1.0.0
+license:             MIT
+license-file:        LICENSE
+cabal-version:       >=1.10
+author:              Joseph Rock
+maintainer:          Joseph Rock <wax818@gmail.com>
+homepage:            https://github.com/j-rock/rayt
+bug-reports:         https://github.com/j-rock/rayt
+copyright:           Copyright (C) 2016 Joseph Rock
+synopsis:            Ray tracer
+build-type:          Simple
+tested-with:         GHC == 7.10.3
+extra-source-files:
+  README.md
+
+source-repository head
+  type: git
+  location: git://github.com/j-rock/rayt.git
+
+executable rayt-prgm
+  default-language:    Haskell2010
+  hs-source-dirs:      exec-src
+  main-is:             Main.hs
+  build-depends:
+    base               >= 4.7 && < 5,
+    JuicyPixels        >= 3.2 && < 3.3,
+    directory          >= 1.2 && < 1.3,
+    rayt
+
+library
+  default-language:    Haskell2010
+  hs-source-dirs:      src, src/Ray
+  build-depends:
+    base               >= 4.7   && < 5,
+    vector             >= 0.11  && < 0.12,
+    MonadRandom        >= 0.4   && < 0.5,
+    random-shuffle     >= 0.0.4 && < 0.1,
+    split              >= 0.2.3 && < 0.3
+  exposed-modules:
+    Ray,
+    Ray.Geometry,
+    Ray.Cast,
+    Ray.RayGen
