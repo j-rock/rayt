@@ -1,13 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
 module Ray.Cast where
 
-import Ray.Geometry
+import           Ray.Geometry
 
-import Data.List (minimumBy)
-import Data.Maybe (mapMaybe)
-import Data.Ord (comparing)
+import           Data.List    (minimumBy)
+import           Data.Maybe   (mapMaybe)
+import           Data.Ord     (comparing)
 
-import qualified Data.Vector as V
+import qualified Data.Vector  as V
 
 -- Simple triplet that contains Red, Green, and Blue components
 -- Each component will range between [0, 1]

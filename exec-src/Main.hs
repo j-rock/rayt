@@ -1,13 +1,15 @@
 module Main where
 
-import Ray
-import Control.Monad (when)
+import qualified Codec.Picture    as Pic
+import           Control.Monad    (when)
+import           Ray
 import qualified System.Directory as Dir
-import qualified Codec.Picture as Pic
 
+-- This is the directory where the output images will be (re)placed
 dataDir :: FilePath
 dataDir = "./rayt-imgs"
 
+-- Entry point to program
 main :: IO ()
 main = do setupDataDirectory
 
@@ -20,10 +22,10 @@ main = do setupDataDirectory
           say "Generating second perspective scene."
           perspScene2
 
-          say "Generating single-ray per pixel"
+          say "Generating single-ray per pixel."
           singleRay
 
-          say "Generating multi-jittered sampling"
+          say "Generating multi-jittered sampling."
           multiRay
 
           say "That's all folks!"

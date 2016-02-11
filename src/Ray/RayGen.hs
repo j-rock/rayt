@@ -1,19 +1,20 @@
+{-# LANGUAGE RankNTypes      #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE RankNTypes #-}
 module Ray.RayGen where
 
-import Ray.Cast
-import Ray.Geometry
+import           Ray.Cast
+import           Ray.Geometry
 
-import Control.Monad
-import Control.Monad.Random
+import           Control.Monad
+import           Control.Monad.Random
 
-import qualified Data.List as List
-import qualified Data.List.Split as Split
-import System.Random.Shuffle (shuffleM)
+import qualified Data.List             as List
+import qualified Data.List.Split       as Split
+import           System.Random.Shuffle (shuffleM)
 
 
 -- Retrieves the 3D position of the view plane cell center
+-- given pixel coordinates.
 viewPlaneCellCenter :: (Int, Int) -> Camera -> V3
 viewPlaneCellCenter (c,r) Camera{..} =
     let wFunc i res = let i'      = fromIntegral i

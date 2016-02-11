@@ -102,7 +102,10 @@ intersectWithRay (Sphere sc r) (Ray o d) =
           then Nothing
           else Just t
 
--- Algorithm ripped from Wikipedia - Moller-Trumbore Intersection Algorithm
+-- #419begin
+--   #type=1
+--   #src=https://en.wikipedia.org/wiki/Möller-Trumbore_intersection_algorithm
+-- #419end
 intersectWithRay (Triangle v1 v2 v3) (Ray o d) =
     let e1   = v2 - v3
         e2   = v3 - v1
