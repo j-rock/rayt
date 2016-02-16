@@ -4,7 +4,7 @@ module Ray.Cast where
 import           Ray.Geometry
 
 import           Data.List    (minimumBy)
-import           Data.Maybe   (mapMaybe)
+import           Data.Maybe   (catMaybes, mapMaybe)
 import           Data.Ord     (comparing)
 
 import qualified Data.Vector  as V
@@ -22,7 +22,9 @@ clamp a b x = max a (min b x)
 
 -- Smart constructor
 rgb :: Double -> Double -> Double -> RGBPixel
-rgb x y z = RGB (normalize $ V x y z)
+rgb x y z = RGB $ V x' y' z'
+  where clean = clamp 0 1
+        (x', y', z') = (clean x, clean y, clean z)
 
 red :: RGBPixel
 red = rgb 1 0 0
@@ -40,7 +42,7 @@ black :: RGBPixel
 black = rgb 0 0 0
 
 white :: RGBPixel
-white = rgb 0 0 0
+white = rgb 1 1 1
 
 -- Materials for objects (right now just solid colors)
 data Material = SolidColor RGBPixel
@@ -146,9 +148,16 @@ computeLighting (Scene _ lights _) _ obj@(Obj shape _) pos =
 
 
 -- Computes the amount of diffuse light given a normal direction and a light.
---Taken from Wikipedia - Lambertian Reflectance
+-- #419begin
+--   #type=1
+--   #src=https://en.wikipedia.org/wiki/Lambertian_reflectance
+-- #419end
+--
+-- Have to negate the light direction because the Wiki page defines
+-- the light direction as coming from the surface and going to the light
+-- source.
 lambertian :: V3 -> Light -> Double
-lambertian normal (DirectionalLight lightI dir) = max 0 (dir .*. normal) * lightI
+lambertian normal (DirectionalLight lightI dir) = max 0 (negate dir .*. normal) * lightI
 
 
 -- Allows for fancier textures as we go along
@@ -158,22 +167,57 @@ getObjectColor (Obj s (CheckerBoard a b)) v = getCheckerboardColor s a b v
 
 -- Chooses between two colors for a given Shape and a point on that shape
 getCheckerboardColor :: Shape -> RGBPixel -> RGBPixel -> V3 -> RGBPixel
-getCheckerboardColor (Plane normal d) a b v =
-    let V nx ny _  = normal
-        p1 = V (-d / nx) 0 0
-        p2 = V (-d / ny) 0 0
-    in choose (magnitude $ v - p1) (magnitude $ v - p2) a b
+getCheckerboardColor (Plane n d) c1 c2 p0@(V x y z) =
+    let V a b c       = n
 
-getCheckerboardColor s@(Sphere c r) a b v =
+        planeRefPoint
+          | not (isZero a) = V (-d / a) 0 0
+          | not (isZero b) = V 0 (-d / b) 0
+          | otherwise      = V 0 0 (-d / c)
+
+        uAxis@(V u1 u2 u3) = normalize $ p0 - planeRefPoint
+        (V v1 v2 v3)       = uAxis `cross` n
+
+        solve j1 j2 k1 k2 p1 p2 = let top = j1 * p2 - j2 * p1
+                                      bot = j1 * k2 - j2 * k1
+                                      x2  = top / bot
+                                      x1  = (p1 - k1 * x2) / j1
+                                  in if isZero j1 || isZero bot
+                                        then Nothing
+                                        else Just (x1, x2)
+
+        solns  = catMaybes [ solve u1 u2 v1 v2 x y
+                           , solve u1 u3 v1 v3 x z
+                           , solve u2 u3 v2 v3 y z
+                           ]
+
+        (u, v) = head solns
+        color  = checkerboardUV c1 c2 u v 20
+
+    in if null solns
+          then c1
+          else color
+
+-- #419begin
+--   #type=1
+--   #src=https://en.wikipedia.org/wiki/UV_mapping
+-- #419end
+getCheckerboardColor s@(Sphere _ r) a b v =
     let V x y z = computeNormal s v
-    in choose (acos z / r) (atan $ y / x) a b
+
+        u'      = 0.5 + atan2 z x / (2 * pi)
+        v'      = 0.5 - asin y / pi
+
+    in checkerboardUV a b u' v' (100 / r)
 
 getCheckerboardColor tri@(Triangle v _ _) a b v' = getCheckerboardColor trianglePlane a b v'
-    where normal = computeNormal tri v
+    where normal        = computeNormal tri v
           trianglePlane = planeFromNormalAndPoint normal v
 
 
--- Chooses a color given two values
-choose :: Double -> Double -> RGBPixel -> RGBPixel -> RGBPixel
-choose x y a b = if c * c >= 0.5 then a else b
-  where c = cos (x + y)
+-- Chooses between two colors based on uv-coordinates on an imaginary checkboard
+checkerboardUV :: RGBPixel -> RGBPixel -> Double -> Double -> Double -> RGBPixel
+checkerboardUV a b u v period =
+    let fVal = cos (period * u) + sin (period * v)
+
+    in if fVal < 0 then a else b
