@@ -36,13 +36,28 @@ normalize v = v *. (1 / magnitude v)
 scaledTo :: V3 -> Double -> V3
 scaledTo v k = normalize v *. k
 
+-- #419begin
+--   #type=1
+--   #src=http://math.stackexchange.com/questions/13261/how-to-get-a-reflection-vector
+-- #419end
+-- Reflect the first vector over the second one. Assumes unit length vectors.
+-- Excuse me for forgetting the most basic of linear algebraic operations.
+reflectedOver :: V3 -> V3 -> V3
+reflectedOver d n = d - 2 * (d .*. n) .* n
+
+-- Clamps vectors component-wise.
+-- Pass in min, max, and the argument vector.
+clampV :: V3 -> V3 -> V3 -> V3
+clampV (V mnx mny mnz) (V mxx mxy mxz) (V x y z) = V x' y' z'
+  where x' = min mxx (max mnx x)
+        y' = min mxy (max mny y)
+        z' = min mxz (max mnz z)
 
 -- Nifty little trick for us to obtain arithmetic operators on 3D vectors
 instance Num V3 where
   (V u v w) + (V x y z) = V (u+x) (v+y) (w+z)
   (V u v w) - (V x y z) = V (u-x) (v-y) (w-z)
   (V u v w) * (V x y z) = V (u*x) (v*y) (w*z)
-  -- (V u v w) - (V x y z) = V (u-x) (v-y) (w-z)
   abs    (V x y z)      = V (abs x) (abs y) (abs z)
   signum (V x y z)      = V (signum x) (signum y) (signum z)
   fromInteger x         = V x' x' x'
@@ -63,75 +78,5 @@ data Ray = Ray V3 V3 deriving (Eq, Ord, Show)
 ray :: V3 -> V3 -> Ray
 ray pos dir = Ray pos (normalize dir)
 
-
-data Shape = Plane V3 Double   -- A normal direction and a coefficient
-           | Sphere V3 Double  -- A center point and a radius
-           | Triangle V3 V3 V3 -- Three points in space (right-hand orientation)
-           deriving (Eq, Ord, Show)
-
-planeFromNormalAndPoint :: V3 -> V3 -> Shape
-planeFromNormalAndPoint n p = Plane n' (negate $ n' .*. p)
-  where n' = normalize n
-
--- A shape must be able to decide where it is intersected by a Ray
--- If successful, returns the distance along the ray where the intersection occurs
-intersectWithRay :: Shape -> Ray -> Maybe Double
-
--- Algorithm ripped from Lecture-2
-intersectWithRay (Plane n d) (Ray p v) =
-    let vDotN = v .*. n
-        t     = negate (p .*. n + d) / vDotN
-    in if isZero vDotN || t <= 0
-          then Nothing
-          else Just t
-
-intersectWithRay (Sphere sc r) (Ray o d) =
-    -- Setting up the quadratic equation coefficients
-    let a = d .*. d
-        b = 2 .* oc .*. d
-        c = oc .*. oc - (r * r)
-        oc = o - sc
-
-    -- Quadratic formula in action
-        discr = b * b - (4 * a * c)
-        sqroot = sqrt discr / (2 * a)
-        bo2a  = negate b / (2 * a)
-        solns = filter (> 0) [bo2a + sqroot, bo2a - sqroot]
-        t = minimum solns
-    in if discr <= 0 || null solns
-          then Nothing
-          else Just t
-
--- #419begin
---   #type=1
---   #src=https://en.wikipedia.org/wiki/Möller-Trumbore_intersection_algorithm
--- #419end
-intersectWithRay (Triangle v1 v2 v3) (Ray o d) =
-    let e1   = v2 - v3
-        e2   = v3 - v1
-        p    = d `cross` e2
-        det  = e1 .*. p
-        invd = 1 / det
-        dt   = o - v1
-        u    = (dt .*. p) * invd
-        q    = dt `cross` e1
-        v    = (d .*. q) * invd
-        t    = (e2 .*. q) * invd
-    in if isZero det || u < 0 || u > 1 || v < 0 || u + v > 1 || t <= 0
-          then Nothing
-          else Just t
-
-
--- Given a point on the Shape, compute the normal direction at that location
-computeNormal :: Shape -> V3 -> V3
-
--- Planes have a uniform normal
-computeNormal (Plane normal _) _ = normal
-
--- Just subtract the intersection point by the sphere center
-computeNormal (Sphere c _) p = normalize (p - c)
-
--- Triangles also have a uniform normal.
--- The edges are v1 -> v2, v2 -> v3, v3 -> v1 (positive orientation)
--- so we use the cross product of the first two edges.
-computeNormal (Triangle v1 v2 v3) _ = normalize $ (v2 - v1) `cross` (v3 - v2)
+getRayDir :: Ray -> V3
+getRayDir (Ray _ dir) = dir
