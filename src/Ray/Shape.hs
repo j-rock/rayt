@@ -3,6 +3,7 @@
 module Ray.Shape where
 
 import           Ray.Geometry
+import           Ray.Octree
 import Ray.Intersection
 
 data Shape = Plane V3 Double   -- A normal direction and a coefficient
@@ -49,22 +50,27 @@ intersectWithRay (Sphere sc r) (Ray o d) =
 
 -- #419begin
 --   #type=1
---   #src=https://en.wikipedia.org/wiki/Möller-Trumbore_intersection_algorithm
+--   #src=http://www.gamedev.net/topic/481835-3d-point-in-triangle-algorithm/
 -- #419end
-intersectWithRay (Triangle v1 v2 v3) (Ray o d) =
-    let e1   = v2 - v3
-        e2   = v3 - v1
-        p    = d `cross` e2
-        det  = e1 .*. p
-        invd = 1 / det
-        dt   = o - v1
-        u    = (dt .*. p) * invd
-        q    = dt `cross` e1
-        v    = (d .*. q) * invd
-        t    = (e2 .*. q) * invd
-    in if isZero det || u < 0 || u > 1 || v < 0 || u + v > 1 || t <= 0
-          then Nothing
-          else Just (t, ())
+intersectWithRay tri@(Triangle v1 v2 v3) r@(Ray o d) =
+    let triPlane = planeFromNormalAndPoint (computeNormal tri v1) v1
+
+        isPointInTri p =
+            let area p1 p2 p3 = magnitude $ (p2-p1) `cross` (p3 - p1)
+                aTri = area v1 v2 v3
+                a1   = area v1 v2 p / aTri
+                a2   = area v2 v3 p / aTri
+                a3   = area v3 v1 p / aTri
+            in and [ all (> 0) [a1,a2,a3]
+                   , all (< 1) [a1,a2,a3]
+                   , abs (1 - (a1 + a2 + a3)) < 1e-10
+                   ]
+
+    in  case intersectWithRay triPlane r of
+            Nothing     -> Nothing
+            Just (t, _) -> if isPointInTri (o + t .* d)
+                           then Just (t, ())
+                           else Nothing
 
 -- Given a point on the Shape, compute the normal direction at that location
 computeNormal :: Shape -> V3 -> V3
@@ -79,3 +85,27 @@ computeNormal (Sphere c _) p = normalize (p - c)
 -- The edges are v1 -> v2, v2 -> v3, v3 -> v1 (positive orientation)
 -- so we use the cross product of the first two edges.
 computeNormal (Triangle v1 v2 v3) _ = normalize $ (v2 - v1) `cross` (v3 - v2)
+
+
+
+-- Returns an AABB for the given Shape
+getShapeBounds :: Shape -> Bounds
+
+-- Planes are infinite, man
+getShapeBounds (Plane _ _) = Bounds (negate huge) huge
+  where huge   = V bigNum bigNum bigNum
+        bigNum = 1e15
+
+-- Move out one radius
+getShapeBounds (Sphere c r) = Bounds (c-rV) (c+rV)
+  where rV = V r r r
+
+getShapeBounds (Triangle v1 v2 v3) =
+    let V x1 y1 z1 = v1
+        V x2 y2 z2 = v2
+        V x3 y3 z3 = v3
+
+        minV = V (minimum [x1,x2,x3]) (minimum [y1,y2,y3]) (minimum [z1,z2,z3])
+        maxV = V (maximum [x1,x2,x3]) (maximum [y1,y2,y3]) (maximum [z1,z2,z3])
+
+    in Bounds minV maxV

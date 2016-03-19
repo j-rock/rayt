@@ -38,12 +38,12 @@ scaledTo v k = normalize v *. k
 
 -- #419begin
 --   #type=1
---   #src=http://math.stackexchange.com/questions/13261/how-to-get-a-reflection-vector
+--   #src=https://en.wikipedia.org/wiki/Phong_reflection_model
 -- #419end
 -- Reflect the first vector over the second one. Assumes unit length vectors.
 -- Excuse me for forgetting the most basic of linear algebraic operations.
 reflectedOver :: V3 -> V3 -> V3
-reflectedOver d n = d - 2 * (d .*. n) .* n
+reflectedOver l n = 2 * (l .*. n) .* n - l
 
 -- Clamps vectors component-wise.
 -- Pass in min, max, and the argument vector.

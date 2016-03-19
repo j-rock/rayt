@@ -5,6 +5,7 @@ module Ray.Scene where
 import           Ray.Geometry
 import           Ray.Intersection
 import           Ray.Mesh
+import           Ray.Octree
 import           Ray.Shape
 
 -- Simple triplet that contains Red, Green, and Blue components -- Each component will range between [0, 1]
@@ -64,8 +65,9 @@ data ColorDetails = ColorDetails {
 directionalLight :: Double -> V3 -> Light
 directionalLight intensity dir = DirectionalLight intensity (normalize dir)
 
+type InternalGeometry = Either Shape Mesh
 -- Something in the scene with a given 3D geometry and material
-data Object = Obj (Either Shape Mesh) Material deriving (Show)
+data Object = Obj InternalGeometry Material deriving (Show)
 
 instance IntersectObj Object where
   type IntersectionMetaData Object = Maybe Face
@@ -76,6 +78,10 @@ instance IntersectObj Object where
                                           Nothing     -> Nothing
                                           Just (t, f) -> Just (t, Just f)
 
+instance AABB Object where
+  type Dict Object = ()
+  getBounds _ (Obj (Left shape) _)       = getShapeBounds shape
+  getBounds _ (Obj (Right (Mesh _ o)) _) = getOctreeBounds o -- getOctreeBounds o
 
 -- A scene has a few objects, a list of light sources, and a background color
 data Scene container = Scene {
@@ -87,10 +93,10 @@ data Scene container = Scene {
 
 -- Given an Object, a point of intersection, and intersection metadata,
 -- calculate the normal direction f
-getObjectNormal :: Either Shape Mesh -> V3 -> IntersectionMetaData Object -> V3
-getObjectNormal (Left  shape) pos _           = computeNormal shape pos
-getObjectNormal (Right _    ) _   Nothing     = V 1 0 0 -- Impossible case
-getObjectNormal (Right mesh ) _   (Just face) = getFaceNormal mesh face
+getObjectNormal :: InternalGeometry -> V3 -> IntersectionMetaData Object -> V3
+getObjectNormal (Left  shape)        pos _           = computeNormal shape pos
+getObjectNormal (Right _    )        _   Nothing     = V 1 0 0 -- Impossible case
+getObjectNormal (Right (Mesh vs _ )) _   (Just face) = getFaceNormal vs face
 
 
 -- Convenience function to rip out diffuse and specular colors
@@ -110,3 +116,7 @@ getLightIntensity (PointLight       i _) = i
 lightDistanceSquared :: Light -> V3 -> Double
 lightDistanceSquared (DirectionalLight _ _  ) _ = 1 -- so that there is no attenuation
 lightDistanceSquared (PointLight       _ pos) p = let v = (pos - p) in v .*. v
+
+
+octreeFromObjects :: [Object] -> Octree Object
+octreeFromObjects = octreeFromList ()

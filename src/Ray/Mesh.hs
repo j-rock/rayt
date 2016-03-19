@@ -9,8 +9,10 @@ import           Ray.Octree
 import Ray.Shape
 
 import qualified Data.Attoparsec.Text as Parse
+import qualified Data.Either          as Either
 import           Data.Text            (Text)
-import qualified Data.Text.IO         as Text
+import qualified Data.Text            as Text
+import qualified Data.Text.IO         as TextIO
 import           Data.Vector          (Vector, (!))
 import qualified Data.Vector          as Vector
 
@@ -47,51 +49,54 @@ instance IntersectObj Mesh where
   getIntersect = intersectMeshWithRay
 
 
+-- Helper function that takes a string "something"
+-- and a parser p designed for a line like:
+--     "something p p p\n"
+-- and pulls out each of the three p values.
+--
+-- For example, for parseVertex, we have string "v" and floating values
+-- parseKeyLine "v" Parse.double takes:
+--   """v 1.0 2.0 3.0\n"""
+-- and returns [(1.0, 2.0, 3.0)]
+parseKeyLine :: Text -> Parse.Parser a -> Parse.Parser (a, a, a)
+parseKeyLine key p = do Parse.skipSpace
+                        _ <- Parse.string key
+                        Parse.skipSpace
+                        a <- p
+                        Parse.skipSpace
+                        b <- p
+                        Parse.skipSpace
+                        c <- p
+                        return (a, b, c)
+
+parseVertex :: Parse.Parser V3
+parseVertex = toV3 <$> parseKeyLine "v" Parse.double
+  where toV3 (a, b, c) = V a b c
+
+parseFace :: Parse.Parser Face
+parseFace = toFace <$> parseKeyLine "f" Parse.decimal
+  where toFace (a, b, c) = Face (a-1) (b-1) (c-1)
+
+parseObjLine :: Parse.Parser (Either V3 Face)
+parseObjLine = Parse.choice [ Left <$> parseVertex
+                            , Right <$> parseFace
+                            ]
 
 -- Given a FilePath, open up that file, and try to produce a Mesh from it,
 -- assuming it's a valid OBJ file
 readInMesh :: FilePath -> IO (Either String Mesh)
-readInMesh fp = do fileContents <- Text.readFile fp
-                   let parser = parseMesh
-                   return $ Parse.parseOnly parser fileContents
+readInMesh fp = do fileContents <- TextIO.readFile fp
+                   let fileLines = Text.lines fileContents
+                       parses    = map (Parse.parseOnly parseObjLine) fileLines
+                       goodPs    = Either.rights parses
+                       (vs, fs)  = Either.partitionEithers goodPs
+                       verts     = Vector.fromList vs
+                       octree    = buildOctreeForMesh verts fs
+                       mesh      = Mesh verts octree
+                   if null goodPs
+                   then return $ Left "Bad parse"
+                   else return $ Right mesh
 
--- A parser to pull out a Mesh value
-parseMesh :: Parse.Parser Mesh
-parseMesh = do vertices <- parseVertices
-               faces    <- parseFaces
-               return $ Mesh vertices $ buildOctreeForMesh vertices faces
-
--- A parser to pull out an array of vertices
-parseVertices :: Parse.Parser (Vector.Vector V3)
-parseVertices = Vector.fromList . map toV3 <$> parseManyKeyLines "v" Parse.double
-  where toV3 (a, b, c) = V a b c
-
--- A parser to pull out a list of faces
-parseFaces :: Parse.Parser [Face]
-parseFaces = map toFace <$> parseManyKeyLines "f" Parse.decimal
-  where toFace (a, b, c) = Face (a-1) (b-1) (c-1) -- fix to use zero-based indexing
-
--- Helper function that takes a string "something"
--- and a parser p designed for a line like:
---     "something p p p\n"
--- and pulls out all the lines with each of the three p values.
---
--- For example, for parseVertices, we have string "v" and floating values
--- parseManyKeyLines "v" Parse.double takes:
---   """v 1.0 2.0 3.0\n
---      v 4.0 5.0 6.0\n"""
--- and returns [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
-parseManyKeyLines :: Text -> Parse.Parser a -> Parse.Parser [(a, a, a)]
-parseManyKeyLines key p = Parse.many1 lineParse
-  where lineParse = do Parse.skipSpace
-                       _ <- Parse.string key
-                       Parse.skipSpace
-                       a <- p
-                       Parse.skipSpace
-                       b <- p
-                       Parse.skipSpace
-                       c <- p
-                       return (a, b, c)
 
 -- Reads through all vertices and finds an axis-aligned
 -- bounding box that contains them all
@@ -145,7 +150,46 @@ retrieveVerticesForFace :: Vector V3 -> Face -> (V3, V3, V3)
 retrieveVerticesForFace verts (Face i1 i2 i3) = (verts ! i1, verts ! i2, verts ! i3)
 
 -- Retrieves the normal vector for a Face in a Mesh
-getFaceNormal :: Mesh -> Face -> V3
-getFaceNormal (Mesh verts _) face =
+getFaceNormal :: Vector V3 -> Face -> V3
+getFaceNormal verts face =
     let (v1, v2, v3) = retrieveVerticesForFace verts face
     in normalize $ (v2 - v1) `cross` (v3 - v2)
+
+
+
+-- A triangular mesh is an array of vertices
+-- and SLL of Faces
+data SlowMesh = SlowMesh (Vector V3) [Face] deriving (Show)
+
+instance IntersectObj SlowMesh where
+  type IntersectionMetaData SlowMesh = Face
+  getIntersect = intersectSlowMeshWithRay
+
+
+intersectSlowMeshWithRay :: Ray -> SlowMesh -> Maybe (Double, Face)
+intersectSlowMeshWithRay r (SlowMesh verts faces) =
+    let coarseMatches = faces
+
+        -- Now filter the coarse matches for actual hits.
+        intersects :: [(Double, Face)]
+        intersects = Maybe.mapMaybe (intersectFaceWithRay verts r) coarseMatches
+
+        best = List.minimumBy (comparing fst) intersects
+
+    in if null intersects
+       then Nothing
+       else Just best
+
+-- Given a FilePath, open up that file, and try to produce a Mesh from it,
+-- assuming it's a valid OBJ file
+readInSlowMesh :: FilePath -> IO (Either String SlowMesh)
+readInSlowMesh fp = do fileContents <- TextIO.readFile fp
+                       let fileLines = Text.lines fileContents
+                           parses    = map (Parse.parseOnly parseObjLine) fileLines
+                           goodPs    = Either.rights parses
+                           (vs, fs)  = Either.partitionEithers goodPs
+                           verts     = Vector.fromList vs
+                           mesh      = SlowMesh verts fs
+                       if null goodPs
+                       then return $ Left "Bad parse"
+                       else return $ Right mesh

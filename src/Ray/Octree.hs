@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE NamedFieldPuns #-}
 
 module Ray.Octree where
 
@@ -10,12 +11,6 @@ import qualified Data.Maybe as Maybe
 -- Bottom-left-back and Top-right-front corners of a cube
 -- An axis-aligned bounding box
 data Bounds = Bounds V3 V3 deriving (Eq, Show)
-
--- Simple sum type for bounding box containment
-data Contains = NotContains
-              | Contains
-              | Partial
-              deriving (Eq, Show)
 
 -- Octree for fast ray-triangle intersection
 data Octree a = Nil Bounds
@@ -37,7 +32,7 @@ class AABB a where
   getBounds :: Dict a -> a -> Bounds
 
 -- Whether or not the first Bounds passed in contain the second Bounds
-aabbContains :: Bounds -> Bounds -> Contains
+aabbContains :: Bounds -> Bounds -> Bool
 aabbContains (Bounds (V bx by bz) (V bu bv bw)) bounds =
     let Bounds (V x y z) (V u v w) = bounds
         preds = [ bx <= x
@@ -47,11 +42,7 @@ aabbContains (Bounds (V bx by bz) (V bu bv bw)) bounds =
                 , bv >= v
                 , bw >= w
                 ]
-    in if and preds
-       then Contains
-       else if or preds
-            then Partial
-            else NotContains
+    in and preds
 
 -- #419begin
 --   #type=1
@@ -71,11 +62,21 @@ aabbContainsRay (Bounds (V bx by bz) (V tx ty tz)) (Ray (V ox oy oz) rayDir) =
         tMax = min (min (max t1 t2) (max t3 t4)) (max t5 t6)
     in tMax >= 0 && tMin < tMax
 
+-- Creates an AABB that can fit both argument AABBs
+aabbExpand :: Bounds -> Bounds -> Bounds
+aabbExpand (Bounds (V a b c) (V d e f)) (Bounds (V g h i) (V j k l)) =
+    let minV = V (min a g) (min b h) (min c i)
+        maxV = V (max d j) (max e k) (max f l)
+    in Bounds minV maxV
+
 
 type Octuple a   = (a, a, a, a, a, a, a, a)
 
 octMap :: (a -> b) -> Octuple a -> Octuple b
 octMap f (a,b,c,d,e,f',g,h) = (f a, f b, f c, f d, f e, f f', f g, f h)
+
+octupleToList :: Octuple a -> [a]
+octupleToList (a,b,c,d,e,f,g,h) = [a,b,c,d,e,f,g,h]
 
 -- Divides an AABB into 8 uniform AABB's.
 splitBounds :: Bounds -> Octuple Bounds
@@ -114,6 +115,11 @@ lenLeq :: Int -> [a] -> Bool
 lenLeq k [] = k >= 0
 lenLeq k (_:fs) = k >= 0 && lenLeq (k-1) fs
 
+octreeFromList :: AABB a => Dict a -> [a] -> Octree a
+octreeFromList d objs = buildOctree d objs bounds
+  where bounds = let initialBounds = Bounds (V 0 0 0) (V 0 0 0)
+                     update bnds obj = aabbExpand bnds (getBounds d obj)
+                 in foldl update initialBounds objs
 
 buildOctree :: AABB a => Dict a -> [a] -> Bounds -> Octree a
 buildOctree _ []   bounds = Nil bounds
@@ -121,57 +127,26 @@ buildOctree _ objs bounds|lenLeq 5 objs =
     let (z1, z2, z3, z4, z5, z6, z7, z8) = octMap Nil $ splitBounds bounds
     in Node bounds z1 z2 z3 z4 z5 z6 z7 z8 objs
 buildOctree d objs bounds =
-    let updateState a ob' =
-            let aBounds = getBounds d a
-                check acc ob =
-                    -- If we have not yet found an octant for this face:
-                    case dirtyBit ob of
-                      Contains    -> ob -- already contained in another octant
-                      Partial     -> ob -- partially contained by another octant
-                      -- Alright, go for it. Test for containment
-                      NotContains -> case aabbContains (snd $ acc ob) aBounds of
-                                       NotContains -> ob -- this octant doesn't contain it
-                                       Contains    -> conc acc ob{dirtyBit = Contains}
-                                       Partial     -> ob{dirtyBit = Partial} -- partial contain
+    let splits = splitBounds bounds
 
-                -- Using the accessor/setter acc, add value a
-                -- to the octant associated with acc.
-                conc acc ob = fst $ acc ob
+        contains aBounds = octupleToList $ octMap (flip aabbContains aBounds) splits
 
-                -- Check the dirty bit
-                --   NotContains/Partial imply we haven't added value a to any octant,
-                --     so add it to the local octant
-                --   Contains implies we put it in an octant already
-                flush ob = case dirtyBit ob of
-                             NotContains -> ob{le = a : le ob}
-                             Partial     -> ob{le = a : le ob, dirtyBit = NotContains}
-                             _           -> ob{dirtyBit = NotContains}
-
-                -- A bunch of accessor/setter functions
-                --  The first element concatenates the value a
-                --     to the associated list
-                --  The second element retrieves the Bounds
-                --     for the associated list
-                _1 ob = (ob{l1 = a : l1 ob}, bs1 ob)
-                _2 ob = (ob{l2 = a : l2 ob}, bs2 ob)
-                _3 ob = (ob{l3 = a : l3 ob}, bs3 ob)
-                _4 ob = (ob{l4 = a : l4 ob}, bs4 ob)
-                _5 ob = (ob{l5 = a : l5 ob}, bs5 ob)
-                _6 ob = (ob{l6 = a : l6 ob}, bs6 ob)
-                _7 ob = (ob{l7 = a : l7 ob}, bs7 ob)
-                _8 ob = (ob{l8 = a : l8 ob}, bs8 ob)
-
-            in foldr ($) ob' [
-                 flush        -- Will it go with this local node? (applied last)
-               , check _1     -- does it go in the 1st octant?
-               , check _2     -- second octant?
-               , check _3     -- etc.
-               , check _4
-               , check _5
-               , check _6
-               , check _7
-               , check _8
-             ]
+        updateState a ob = let aBounds = getBounds d a
+                               allContains = contains aBounds
+                               updates = [ ob{l1 = a : l1 ob}
+                                         , ob{l2 = a : l2 ob}
+                                         , ob{l3 = a : l3 ob}
+                                         , ob{l4 = a : l4 ob}
+                                         , ob{l5 = a : l5 ob}
+                                         , ob{l6 = a : l6 ob}
+                                         , ob{l7 = a : l7 ob}
+                                         , ob{l8 = a : l8 ob}
+                                         ]
+                               withUpd = zip allContains updates
+                               containers = filter fst withUpd
+                           in if length containers == 1
+                              then snd . head $ containers
+                              else ob{le = a : le ob}
 
         octreeBuild = makeOctreeBuild bounds
         bld = buildOctree d
@@ -211,13 +186,12 @@ data OctreeBuild a = Ob {
                      , bs6 :: Bounds
                      , bs7 :: Bounds
                      , bs8 :: Bounds
-                     , dirtyBit :: Contains
                      }
 
 makeOctreeBuild :: Bounds -> OctreeBuild a
 makeOctreeBuild bounds =
     let (b1, b2, b3, b4, b5, b6, b7, b8) = splitBounds bounds
-    in Ob [] [] [] [] [] [] [] [] [] b1 b2 b3 b4 b5 b6 b7 b8 NotContains
+    in Ob [] [] [] [] [] [] [] [] [] b1 b2 b3 b4 b5 b6 b7 b8
 
 
 instance Intersector Octree where
@@ -250,3 +224,7 @@ getOctreeIntersects octree r =
         -- Now filter the coarse matches for actual hits.
         intersects = Maybe.mapMaybe (intersectObjWithRay r) coarseMatches
     in intersects
+
+getOctreeBounds :: Octree a -> Bounds
+getOctreeBounds (Nil b)    = b
+getOctreeBounds Node{aabb} = aabb

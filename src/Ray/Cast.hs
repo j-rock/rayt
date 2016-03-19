@@ -104,14 +104,14 @@ computeLighting scene viewRay pos (Obj eitherShapeMesh material) metaData =
 
                               lightComponent = lightIntensity / lightDistanceSquared light pos
 
-                              result = lightComponent .* (diffuseComponent)
+                              result = lightComponent .* (diffuseComponent + specularComponent)
 
                           in result
-                          -- in lightComponent .* (diffuseComponent + specularComponent)
 
         clampedColor = clampV (V 0 0 0) (V 1 1 1) rawColor
+        out = RGB clampedColor
 
-    in RGB clampedColor
+    in out
 
 over :: [a] -> (a -> b) -> [b]
 over = flip map
@@ -119,12 +119,12 @@ over = flip map
 -- Given a point in space, and all the objects in a scene, can a given
 -- Light actually illuminate that point in space?
 isVisible :: Intersector i => V3 -> i Object -> Light -> Bool
-isVisible p objs (DirectionalLight _ dir)  = isRayUnobstructedByT p dir 1e10 objs
-isVisible p objs (PointLight       _ pos)  = isRayUnobstructedByT pos lightDir t objs
+isVisible p objs (DirectionalLight _ dir) = isRayUnobstructedByT p (negate dir) 1e10 objs
+isVisible p objs (PointLight       _ pos) = isRayUnobstructedByT pos lightDir t objs
   where objectToLightDir = pos - p
         distance = magnitude objectToLightDir
         lightDir = objectToLightDir *. (1 / distance)
-        t        = distance - 1e-10
+        t        = distance - 1e-9
 
 -- Takes a starting position, a direction, and finds if there are any collisions
 -- in the Scene up until a certain point (a distance along the ray)
