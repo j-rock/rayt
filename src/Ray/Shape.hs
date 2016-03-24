@@ -15,9 +15,12 @@ instance IntersectObj Shape where
   type IntersectionMetaData Shape = ()
   getIntersect = flip intersectWithRay
 
+planeFromUnitNormalAndPoint :: V3 -> V3 -> Shape
+planeFromUnitNormalAndPoint n p = Plane n (negate $ n .*. p)
+{-# INLINE planeFromUnitNormalAndPoint #-}
+
 planeFromNormalAndPoint :: V3 -> V3 -> Shape
-planeFromNormalAndPoint n p = Plane n' (negate $ n' .*. p)
-  where n' = normalize n
+planeFromNormalAndPoint n = planeFromUnitNormalAndPoint $ normalize n
 
 -- A shape must be able to decide where it is intersected by a Ray
 -- If successful, returns the distance along the ray where the intersection occurs
@@ -34,35 +37,50 @@ intersectWithRay (Plane n d) (Ray p v) =
 intersectWithRay (Sphere sc r) (Ray o d) =
     -- Setting up the quadratic equation coefficients
     let a = d .*. d
-        b = 2 .* oc .*. d
+        b = 2 * (oc .*. d)
         c = oc .*. oc - (r * r)
         oc = o - sc
 
     -- Quadratic formula in action
         discr = b * b - (4 * a * c)
-        sqroot = sqrt discr / (2 * a)
-        bo2a  = negate b / (2 * a)
-        solns = filter (> 0) [bo2a + sqroot, bo2a - sqroot]
+        twoA = 2 * a
+        sqroot = sqrt discr / twoA
+        bo2a  = negate b / twoA
+        solns = takeWhile (>= 0) [bo2a + sqroot, bo2a - sqroot]
         t = minimum solns
+
     in if discr <= 0 || null solns
-          then Nothing
-          else Just (t, ())
+       then Nothing
+       else Just (t, ())
 
 -- #419begin
 --   #type=1
 --   #src=http://www.gamedev.net/topic/481835-3d-point-in-triangle-algorithm/
 -- #419end
-intersectWithRay tri@(Triangle v1 v2 v3) r@(Ray o d) =
-    let triPlane = planeFromNormalAndPoint (computeNormal tri v1) v1
+intersectWithRay (Triangle v1 v2 v3) r@(Ray o d) =
+    let v13 = negate v31
+        v21 = v2 - v1
+        v31 = v3 - v1
+        v32 = v3 - v2
+
+        c2132 = v21 `cross` v32
+        norm = normalize c2132
+
+        triPlane = planeFromUnitNormalAndPoint norm v1
 
         isPointInTri p =
-            let area p1 p2 p3 = magnitude $ (p2-p1) `cross` (p3 - p1)
-                aTri = area v1 v2 v3
-                a1   = area v1 v2 p / aTri
-                a2   = area v2 v3 p / aTri
-                a3   = area v3 v1 p / aTri
-            in and [ all (> 0) [a1,a2,a3]
-                   , all (< 1) [a1,a2,a3]
+            let sarea v ps pt = sqrMagnitude $ v `cross` (pt - ps)
+                saTri = sqrMagnitude c2132
+                sa1   = sarea v21 v1 p / saTri
+                sa2   = sarea v32 v2 p / saTri
+                sa3   = sarea v13 v3 p / saTri
+
+                a1 = sqrt sa1
+                a2 = sqrt sa2
+                a3 = sqrt sa3
+
+            in and [ a1 > 0, a2 > 0, a3 > 0
+                   , a1 < 1, a2 < 1, a3 < 1
                    , abs (1 - (a1 + a2 + a3)) < 1e-10
                    ]
 
@@ -100,12 +118,8 @@ getShapeBounds (Plane _ _) = Bounds (negate huge) huge
 getShapeBounds (Sphere c r) = Bounds (c-rV) (c+rV)
   where rV = V r r r
 
-getShapeBounds (Triangle v1 v2 v3) =
-    let V x1 y1 z1 = v1
-        V x2 y2 z2 = v2
-        V x3 y3 z3 = v3
-
-        minV = V (minimum [x1,x2,x3]) (minimum [y1,y2,y3]) (minimum [z1,z2,z3])
+getShapeBounds (Triangle (V x1 y1 z1) (V x2 y2 z2) (V x3 y3 z3)) =
+    let minV = V (minimum [x1,x2,x3]) (minimum [y1,y2,y3]) (minimum [z1,z2,z3])
         maxV = V (maximum [x1,x2,x3]) (maximum [y1,y2,y3]) (maximum [z1,z2,z3])
 
     in Bounds minV maxV

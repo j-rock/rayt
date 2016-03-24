@@ -1,10 +1,11 @@
+{-# LANGUAGE BangPatterns #-}
+
 module Main where
 
-import qualified Codec.Picture    as Pic
+import qualified ImageWriter
 import           Control.Monad    (when)
 import           Ray
 import qualified System.Directory as Dir
-import Debug.Trace
 
 -- This is the directory where the output images will be (re)placed
 dataDir :: FilePath
@@ -43,10 +44,10 @@ main = do setupDataDirectory
       redMat   = matFromColor red
 
 
-      floorPlane = planeFromNormalAndPoint (V 0 1 0.04) (V 0 (-0.0101) 0)
+      floorPlane = planeFromNormalAndPoint (V 0 0 1) (V 0 (-0.0101) (-4))
       floorObj = Obj (Left floorPlane) floorMat
 
-      littleNumSpheres = 5
+      littleNumSpheres = 100
 
       spheres = map (\p -> Obj (Left (Sphere p 0.5)) (cl p)) pts
         where rng = [1 .. littleNumSpheres]
@@ -59,9 +60,9 @@ main = do setupDataDirectory
       bunnySphereObj = Obj (Left bSphere) $ matFromColor yellow
 
       -- objects = floorObj:spheres
-      objects = [floorObj]
+      objects = []
 
-      light1 = directionalLight 0.1 $ V (1) (-1) (-1)
+      light1 = directionalLight 0.3 $ V 0 0 (-1)
       light2 = directionalLight 0.4 $ V 0 (-1) 1
       light3 = PointLight 0.01 $ V (-2.68e-2) (9.349e-2) (-7.872e-2)
       light4 = PointLight 0.005 $ V (-1.68e-2) (9.349e-2) (-7.872e-2)
@@ -103,14 +104,8 @@ main = do setupDataDirectory
 
 -- With all the info, make the image and save it to disk
 mkImage :: Intersector i => FilePath -> Scene i -> Camera -> RayGenFunc -> IO ()
-mkImage fp scene cam rgf =
-    do let pixelFunc = raycast scene cam rgf
+mkImage !fp !scene !cam !rgf =
+    let pixelFunc !x !y = toRGBPixel $ raycast scene cam rgf x y
+        outPath   = dataDir ++ "/" ++ fp ++ ".png"
 
-           hght = height cam
-
-           genFunc x y = let (r,g,b) = toRGBPixel (pixelFunc x (hght-1-y))
-                         in Pic.PixelRGB8 r g b
-
-           image = Pic.generateImage genFunc (width cam) hght
-
-       Pic.writePng (dataDir ++ "/" ++ fp ++ ".png") image
+    in ImageWriter.writeImage outPath pixelFunc (width cam) (height cam)

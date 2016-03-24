@@ -11,8 +11,6 @@ import           Ray.Scene
 import           Data.List    (minimumBy)
 import           Data.Ord     (comparing)
 
-import Debug.Trace
-
 data Camera = Camera {
                 position    :: V3
               , lookAt      :: V3

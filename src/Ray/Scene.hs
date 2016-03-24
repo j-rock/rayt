@@ -7,16 +7,19 @@ import           Ray.Intersection
 import           Ray.Mesh
 import           Ray.Octree
 import           Ray.Shape
+import           Data.Word (Word8)
 
 -- Simple triplet that contains Red, Green, and Blue components -- Each component will range between [0, 1]
 data RGBPixel = RGB V3 deriving (Eq, Ord, Show)
 
-toRGBPixel :: Integral a => RGBPixel -> (a, a, a)
+toRGBPixel :: RGBPixel -> (Word8, Word8, Word8)
 toRGBPixel (RGB (V r g b)) = (rip r, rip g, rip b)
   where rip x = clamp 0 255 (round (255.0 * x))
+{-# INLINE toRGBPixel #-}
 
 clamp :: Ord a => a -> a -> a -> a
 clamp a b x = max a (min b x)
+{-# INLINE clamp #-}
 
 -- Smart constructor
 rgb :: Double -> Double -> Double -> RGBPixel

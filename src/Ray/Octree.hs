@@ -129,7 +129,7 @@ buildOctree _ objs bounds|lenLeq 5 objs =
 buildOctree d objs bounds =
     let splits = splitBounds bounds
 
-        contains aBounds = octupleToList $ octMap (flip aabbContains aBounds) splits
+        contains aBounds = octupleToList $ octMap (`aabbContains` aBounds) splits
 
         updateState a ob = let aBounds = getBounds d a
                                allContains = contains aBounds

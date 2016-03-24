@@ -13,7 +13,7 @@ import qualified Data.Either          as Either
 import           Data.Text            (Text)
 import qualified Data.Text            as Text
 import qualified Data.Text.IO         as TextIO
-import           Data.Vector          (Vector, (!))
+import           Data.Vector          (Vector)
 import qualified Data.Vector          as Vector
 
 import qualified Data.Maybe as Maybe
@@ -29,9 +29,9 @@ data Face = Face VertIndex VertIndex VertIndex deriving (Eq, Show)
 instance AABB Face where
   type Dict Face = Vector V3
   getBounds verts (Face i1 i2 i3) =
-      let V x1 y1 z1 = verts ! i1
-          V x2 y2 z2 = verts ! i2
-          V x3 y3 z3 = verts ! i3
+      let V x1 y1 z1 = Vector.unsafeIndex verts i1
+          V x2 y2 z2 = Vector.unsafeIndex verts i2
+          V x3 y3 z3 = Vector.unsafeIndex verts i3
           minX = minimum [x1, x2, x3]
           minY = minimum [y1, y2, y3]
           minZ = minimum [z1, z2, z3]
@@ -108,7 +108,7 @@ computeBoundsForMesh verts =
 
         go i bounds| i < len   =
             let Bounds (V a b c) (V u v w) = bounds
-                V x y z                    = verts ! i
+                V x y z                    = Vector.unsafeIndex verts i
                 a' = min a x
                 b' = min b y
                 c' = min c z
@@ -148,6 +148,7 @@ intersectFaceWithRay verts r face =
 
 retrieveVerticesForFace :: Vector V3 -> Face -> (V3, V3, V3)
 retrieveVerticesForFace verts (Face i1 i2 i3) = (verts ! i1, verts ! i2, verts ! i3)
+  where (!) = Vector.unsafeIndex
 
 -- Retrieves the normal vector for a Face in a Mesh
 getFaceNormal :: Vector V3 -> Face -> V3
