@@ -21,6 +21,7 @@ planeFromUnitNormalAndPoint n p = Plane n (negate $ n .*. p)
 
 planeFromNormalAndPoint :: V3 -> V3 -> Shape
 planeFromNormalAndPoint n = planeFromUnitNormalAndPoint $ normalize n
+{-# INLINE planeFromNormalAndPoint #-}
 
 -- A shape must be able to decide where it is intersected by a Ray
 -- If successful, returns the distance along the ray where the intersection occurs
@@ -58,15 +59,13 @@ intersectWithRay (Sphere sc r) (Ray o d) =
 --   #src=http://www.gamedev.net/topic/481835-3d-point-in-triangle-algorithm/
 -- #419end
 intersectWithRay (Triangle v1 v2 v3) r@(Ray o d) =
-    let v13 = negate v31
+    let v13 = v1 - v3
         v21 = v2 - v1
-        v31 = v3 - v1
         v32 = v3 - v2
 
         c2132 = v21 `cross` v32
-        norm = normalize c2132
 
-        triPlane = planeFromUnitNormalAndPoint norm v1
+        triPlane = planeFromNormalAndPoint c2132 v1
 
         isPointInTri p =
             let sarea v ps pt = sqrMagnitude $ v `cross` (pt - ps)

@@ -149,6 +149,7 @@ intersectFaceWithRay verts r face =
 retrieveVerticesForFace :: Vector V3 -> Face -> (V3, V3, V3)
 retrieveVerticesForFace verts (Face i1 i2 i3) = (verts ! i1, verts ! i2, verts ! i3)
   where (!) = Vector.unsafeIndex
+{-# INLINE retrieveVerticesForFace #-}
 
 -- Retrieves the normal vector for a Face in a Mesh
 getFaceNormal :: Vector V3 -> Face -> V3
