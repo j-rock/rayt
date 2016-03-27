@@ -15,7 +15,7 @@ data Bounds = Bounds V3 V3 deriving (Eq, Show)
 -- Octree for fast ray-triangle intersection
 data Octree a = Nil Bounds
               | Node {
-                  aabb   :: Bounds
+                  aabb      :: Bounds
                 , zone1     :: Octree a
                 , zone2     :: Octree a
                 , zone3     :: Octree a
@@ -24,7 +24,7 @@ data Octree a = Nil Bounds
                 , zone6     :: Octree a
                 , zone7     :: Octree a
                 , zone8     :: Octree a
-                , locals :: [a]
+                , locals    :: [a]
                 } deriving (Eq, Show)
 
 class AABB a where
@@ -218,7 +218,7 @@ getOctreeCoarseIntersects octree r =
     in go [] octree
 
 getOctreeIntersects :: IntersectObj a =>
-                       Octree a -> Ray-> [(Double, a, IntersectionMetaData a)]
+                       Octree a -> Ray -> [(Double, a, IntersectionMetaData a)]
 getOctreeIntersects octree r =
     let coarseMatches = getOctreeCoarseIntersects octree r
         -- Now filter the coarse matches for actual hits.
