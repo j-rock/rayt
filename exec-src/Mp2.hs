@@ -59,8 +59,7 @@ main = do setupDataDirectory
       bSphere = Sphere (V 0.0608 0.189 (-1.168e-1)) 0.04
       bunnySphereObj = Obj (Left bSphere) $ matFromColor yellow
 
-      objects = floorObj:spheres
-      -- objects = []
+      objects = []
 
       light1 = directionalLight 0.3 $ V 0 0 (-1)
       light2 = directionalLight 0.4 $ V 0 (-1) 1
@@ -97,9 +96,12 @@ main = do setupDataDirectory
                 , cellLength  = 0.1
                 }
 
-      image1 extraObjs = mkImage "persp" scene cam orthographicRayGen
+      image1 extraObjs = mkImage "persp" scene' cam1 orthographicRayGen
         where scene' = scene{objs = objs'}
-              objs'  = octreeFromObjects $ extraObjs ++ objs scene
+              objs'  = octreeFromObjects $ extraObjs
+
+      -- image1 _ = mkImage "persp" scene' cam orthographicRayGen
+      --   where scene' = scene{objs = floorObj:spheres}
 
 
 -- With all the info, make the image and save it to disk
