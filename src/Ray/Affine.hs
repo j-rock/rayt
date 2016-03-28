@@ -51,81 +51,30 @@ transposeTrans (Reflect ax)    = Reflect ax
 transposeTrans x               = invertTrans x
 
 
-type Sixteentuple a = (a,a,a,a,  a,a,a,a,  a,a,a,a,  a,a,a,a)
-type AffMat = Sixteentuple Double
+applyTrans :: AffineTransformation -> V4 -> V4
+-- Using w = 0,1 assumption
+applyTrans (Translate _           ) v@(V4 _ _ _ 0) = v
+applyTrans (Translate (V tx ty tz))   (V4 x y z w) = V4 (tx+x) (ty+y) (tz+z) w
 
-asMatrix :: AffineTransformation -> AffMat
-asMatrix (Translate (V x y z))  = (1,0,0,x,  0,1,0,y,  0,0,1,z,  0,0,0,1)
-asMatrix (TranslateTranspose v) = matTranspose $ asMatrix $ Translate v
-asMatrix (Scale (V x y z))      = (x,0,0,0,  0,y,0,0,  0,0,z,0,  0,0,0,1)
+applyTrans (TranslateTranspose (V tx ty tz)) (V4 x y z w)  = V4 x y z (tx*x + ty*y + tz*z + w)
 
-asMatrix (Rotation X ang) = (1,0,0,0,  0,c,n,0,  0,s,c,0,  0,0,0,1)
-  where (c, s, n) = computeDegree ang
-asMatrix (Rotation Y ang) = (c,0,s,0,  0,1,0,0,  n,0,c,0,  0,0,0,1)
-  where (c, s, n) = computeDegree ang
-asMatrix (Rotation Z ang) = (c,n,0,0,  s,c,0,0,  0,0,1,0,  0,0,0,1)
-  where (c, s, n) = computeDegree ang
+applyTrans (Scale (V sx sy sz)) (V4 x y z w) = V4 (sx*x) (sy*y) (sz*z) w
 
-asMatrix (Reflect X) = (-1,0,0,0,  0, 1,0,0,  0,0, 1,0,  0,0,0,1)
-asMatrix (Reflect Y) = ( 1,0,0,0,  0,-1,0,0,  0,0, 1,0,  0,0,0,1)
-asMatrix (Reflect Z) = ( 1,0,0,0,  0, 1,0,0,  0,0,-1,0,  0,0,0,1)
+applyTrans (Reflect ax) (V4 x y z w)|ax == X   = V4 (-x)  y   z w
+                                    |ax == Y   = V4   x (-y)  z w
+                                    |otherwise = V4   x   y (-z) w
 
-computeDegree :: Double -> (Double, Double, Double)
-computeDegree deg = let t = deg * pi / 180
-                        s = sin t
-                    in (cos t, s, negate s)
-
-matTranspose :: AffMat -> AffMat
-matTranspose (a1,a2,a3,a4, b1,b2,b3,b4, c1,c2,c3,c4, d1,d2,d3,d4) =
-    ( a1,b1,c1,d1
-    , a2,b2,c2,d2
-    , a3,b3,c3,d3
-    , a4,b4,c4,d4
-    )
-
-matMult :: AffMat -> AffMat -> AffMat
-matMult (a1,a2,a3,a4, b1,b2,b3,b4, c1,c2,c3,c4, d1,d2,d3,d4)
-        (e1,e2,e3,e4, f1,f2,f3,f4, g1,g2,g3,g4, h1,h2,h3,h4) =
-    let a1' = quadDot a1 a2 a3 a4 e1 f1 g1 h1
-        a2' = quadDot a1 a2 a3 a4 e2 f2 g2 h2
-        a3' = quadDot a1 a2 a3 a4 e3 f3 g3 h3
-        a4' = quadDot a1 a2 a3 a4 e4 f4 g4 h4
-
-        b1' = quadDot b1 b2 b3 b4 e1 f1 g1 h1
-        b2' = quadDot b1 b2 b3 b4 e2 f2 g2 h2
-        b3' = quadDot b1 b2 b3 b4 e3 f3 g3 h3
-        b4' = quadDot b1 b2 b3 b4 e4 f4 g4 h4
-
-        c1' = quadDot c1 c2 c3 c4 e1 f1 g1 h1
-        c2' = quadDot c1 c2 c3 c4 e2 f2 g2 h2
-        c3' = quadDot c1 c2 c3 c4 e3 f3 g3 h3
-        c4' = quadDot c1 c2 c3 c4 e4 f4 g4 h4
-
-        d1' = quadDot d1 d2 d3 d4 e1 f1 g1 h1
-        d2' = quadDot d1 d2 d3 d4 e2 f2 g2 h2
-        d3' = quadDot d1 d2 d3 d4 e3 f3 g3 h3
-        d4' = quadDot d1 d2 d3 d4 e4 f4 g4 h4
-
-    in (a1',a2',a3',a4', b1',b2',b3',b4', c1',c2',c3',c4', d1',d2',d3',d4')
+applyTrans (Rotation ax ang) (V4 x y z w)|ax == X   = V4 x (c*y - s*z) (s*y + c*z) w
+                                         |ax == Y   = V4 (c*x + s*z) y (c*z - s*x) w
+                                         |otherwise = V4 (c*x - s*y) (s*x + c*y) z w
+  where (c, s) = let t = ang * pi / 180
+                 in (cos t, sin t)
 
 
-quadDot :: Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double -> Double
-quadDot a1 a2 a3 a4 b1 b2 b3 b4 = a1*b1 + a2*b2 + a3*b3 + a4*b4
-{-# INLINE quadDot #-}
-
-applyMat :: AffMat -> V4 -> V3       -- Last row collapsed
-applyMat (a1,a2,a3,a4, b1,b2,b3,b4, c1,c2,c3,c4, _,_,_,_) (V4 x y z w) =
-    let x' = a1*x + a2*y + a3*z + a4*w
-        y' = b1*x + b2*y + b3*z + b4*w
-        z' = c1*x + c2*y + c3*z + c4*w
-    in V x' y' z'
-
-buildFunc :: [AffMat] -> V4 -> V3
--- Technically, one should divide by w, but w always = 0 or 1
-buildFunc []       (V4 x y z _) = V x y z
-buildFunc [m]       v           = applyMat m v
-buildFunc (m:m':ms) v           = buildFunc (matMult m m' : ms) v
-
+buildFunc :: [AffineTransformation] -> V4 -> V3
+buildFunc ats v = let (V4 x y z _) = foldr applyTrans v ats
+                  in V x y z -- technically, one should divide by w
+                             -- but w = 0 or 1
 
 data AffineBijection = AffineBijection {
                          project :: V4 -> V3 -- T(v)
@@ -138,9 +87,9 @@ instance Show AffineBijection where
 
 mkAffine :: [AffineTransformation] -> AffineBijection
 mkAffine ts =
-    let mats  = map asMatrix ts
-        imats = reverse $ map (asMatrix . invertTrans) ts
-        tmats = map (asMatrix . invertTrans . transposeTrans) ts
+    let mats  = ts
+        imats = reverse $ map invertTrans ts
+        tmats = map (invertTrans . transposeTrans) ts
 
     in AffineBijection {
          project = buildFunc mats

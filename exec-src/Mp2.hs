@@ -43,7 +43,7 @@ main = do setupDataDirectory
       floorPlane = planeFromUnitNormalAndPoint (V 0 1 0) (V 0 0 0)
       floorObj = Obj (Left floorPlane) floorMat $ mkAffine []
 
-      littleNumSpheres = 5
+      littleNumSpheres = 100
 
       spheres = map (\p -> Obj sph (cl p) (trn p)) pts
         where rng = [1 .. littleNumSpheres]
@@ -64,8 +64,8 @@ main = do setupDataDirectory
       lts    = [
                  -- light1
                  light2
-               -- , light3
-               -- , light4, light5
+               , light3
+               , light4, light5
                ]
 
       colorDeets = ColorDetails {
@@ -97,22 +97,22 @@ main = do setupDataDirectory
              , cellLength  = 6.8 / fromIntegral squareSide
              }
 
-      -- image1 bunnyMesh =
-      --   let (len, rng) = (5, [1..len])
-      --       bunnyScalar = 7
-      --       bunnyObjs = flip map [V x 0 z | x <- rng, z <- rng] $ \p ->
-      --                      Obj (Right bunnyMesh) (color p) (xform p)
-      --       color (V x _ z) = matFromColor (RGB $ V (x / len) (z / len) 0.5)
-      --       xform v@(V x _ z) = mkAffine [translateA v, rotateA Y deg, scaleA bunnyScalar]
-      --         where deg = negate $ 10 * (len-z) + 5 * x
+      image1 bunnyMesh =
+        let (len, rng) = (5, [1..len])
+            bunnyScalar = 7
+            bunnyObjs = flip map [V x 0 z | x <- rng, z <- rng] $ \p ->
+                           Obj (Right bunnyMesh) (color p) (xform p)
+            color (V x _ z) = matFromColor (RGB $ V (x / len) (z / len) 0.5)
+            xform v@(V x _ z) = mkAffine [translateA v, rotateA Y deg, scaleA bunnyScalar]
+              where deg = negate $ 10 * (len-z) + 5 * x
 
-      --       objs' = octreeFromObjects (floorObj:bunnyObjs)
-      --       scene' = scene{objs = objs'}
+            objs' = octreeFromObjects (floorObj:bunnyObjs)
+            scene' = scene{objs = objs'}
 
-      --   in mkImage "persp" scene' cam2 perspectiveRayGen
+        in mkImage "persp" scene' cam2 perspectiveRayGen
 
-      image1 _ = mkImage "persp" scene' cam orthographicRayGen
-        where scene' = scene{objs = floorObj:spheres}
+      -- image1 _ = mkImage "persp" scene' cam orthographicRayGen
+      --   where scene' = scene{objs = floorObj:spheres}
 
 
 -- With all the info, make the image and save it to disk
