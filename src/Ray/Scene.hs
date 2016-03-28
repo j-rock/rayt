@@ -2,6 +2,7 @@
 
 module Ray.Scene where
 
+import           Ray.Affine
 import           Ray.Geometry
 import           Ray.Intersection
 import           Ray.Mesh
@@ -59,6 +60,8 @@ data Light = DirectionalLight Double V3 -- an intensity and a direction
 
 data ColorDetails = ColorDetails {
                       backgroundColor     :: RGBPixel
+                    , ambientCoefficient  :: Double
+                    , ambientIntensity    :: Double
                     , diffuseCoefficient  :: Double
                     , specularCoefficient :: Double
                     , specularExponent    :: Double
@@ -70,21 +73,51 @@ directionalLight intensity dir = DirectionalLight intensity (normalize dir)
 
 type InternalGeometry = Either Shape Mesh
 -- Something in the scene with a given 3D geometry and material
-data Object = Obj InternalGeometry Material deriving (Show)
+data Object = Obj {
+                geometry  :: InternalGeometry
+              , material  :: Material
+              , transform :: AffineBijection
+              } deriving (Show)
 
 instance IntersectObj Object where
   type IntersectionMetaData Object = Maybe Face
-  getIntersect r (Obj (Left shape) _) = case getIntersect r shape of
-                                          Nothing     -> Nothing
-                                          Just (t, _) -> Just (t, Nothing)
-  getIntersect r (Obj (Right mesh) _) = case getIntersect r mesh of
-                                          Nothing     -> Nothing
-                                          Just (t, f) -> Just (t, Just f)
+  getIntersect r (Obj (Left shape) _ tr) =
+      let r' = invertRay tr r
+      in case getIntersect r' shape of
+             Nothing     -> Nothing
+             Just (t, _) -> Just (t, Nothing)
+  getIntersect r (Obj (Right mesh) _ tr) =
+      let r' = invertRay tr r
+      in case getIntersect r' mesh of
+             Nothing     -> Nothing
+             Just (t, f) -> Just (t, Just f)
 
 instance AABB Object where
   type Dict Object = ()
-  getBounds _ (Obj (Left shape) _)       = getShapeBounds shape
-  getBounds _ (Obj (Right (Mesh _ o)) _) = getOctreeBounds o -- getOctreeBounds o
+  getBounds _ (Obj (Left shape) _ tr)       = alterBounds tr $ getShapeBounds shape
+  getBounds _ (Obj (Right (Mesh _ o)) _ tr) = alterBounds tr $ getOctreeBounds o
+
+alterBounds :: AffineBijection -> Bounds -> Bounds
+alterBounds ab (Bounds (V nx ny nz) (V mx my mz)) =
+    let corners = [ V nx ny nz
+                  , V mx ny nz
+                  , V nx ny mz
+                  , V mx ny mz
+                  , V mx my mz
+                  , V nx my mz
+                  , V mx my nz
+                  , V nx my nz
+                  ]
+
+        projected = map (projectPoint ab) corners
+
+        minmax (V nx' ny' nz', V mx' my' mz') (V x y z) =
+            (V (min nx' x) (min ny' y) (min nz' z),
+             V (max mx' x) (max my' y) (max mz' z))
+
+        (minV, maxV) = foldl minmax (head projected, head projected) projected
+
+     in Bounds minV maxV
 
 -- A scene has a few objects, a list of light sources, and a background color
 data Scene container = Scene {
@@ -96,10 +129,10 @@ data Scene container = Scene {
 
 -- Given an Object, a point of intersection, and intersection metadata,
 -- calculate the normal direction f
-getObjectNormal :: InternalGeometry -> V3 -> IntersectionMetaData Object -> V3
-getObjectNormal (Left  shape)        pos _           = computeNormal shape pos
-getObjectNormal (Right _    )        _   Nothing     = V 1 0 0 -- Impossible case
-getObjectNormal (Right (Mesh vs _ )) _   (Just face) = getFaceNormal vs face
+getUnnormalizedObjectNormal :: InternalGeometry -> V3 -> IntersectionMetaData Object -> V3
+getUnnormalizedObjectNormal (Left  shape)        pos _           = computeNormal shape pos
+getUnnormalizedObjectNormal (Right _    )        _   Nothing     = V 1 0 0 -- Impossible case
+getUnnormalizedObjectNormal (Right (Mesh vs _ )) _   (Just face) = getFaceNormal vs face
 
 
 -- Convenience function to rip out diffuse and specular colors

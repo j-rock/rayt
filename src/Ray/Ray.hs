@@ -1,7 +1,8 @@
 -- This module just imports the others and exports them, so that
 -- other programs only have to import module Ray
 module Ray
-    ( module Ray.Cast
+    ( module Ray.Affine
+    , module Ray.Cast
     , module Ray.Geometry
     , module Ray.Intersection
     , module Ray.Mesh
@@ -11,6 +12,7 @@ module Ray
     , module Ray.Shape
     ) where
 
+import           Ray.Affine
 import           Ray.Cast
 import           Ray.Geometry
 import           Ray.Intersection

@@ -65,7 +65,10 @@ intersectWithRay (Triangle v1 v2 v3) r@(Ray o d) =
 
         c2132 = v21 `cross` v32
 
-        triPlane = planeFromNormalAndPoint c2132 v1
+        -- c2132 might not actually be unit, but we only
+        -- construct the plane for a quick intersection.
+        -- Cheaper to not have to normalize
+        triPlane = planeFromUnitNormalAndPoint c2132 v1
 
         isPointInTri p =
             let sarea v ps pt = sqrMagnitude $ v `cross` (pt - ps)
@@ -89,19 +92,20 @@ intersectWithRay (Triangle v1 v2 v3) r@(Ray o d) =
                            then Just (t, ())
                            else Nothing
 
--- Given a point on the Shape, compute the normal direction at that location
+-- Given a point on the Shape, compute the normal direction at that location.
+-- It does not need to be normalized.
 computeNormal :: Shape -> V3 -> V3
 
 -- Planes have a uniform normal
 computeNormal (Plane normal _) _ = normal
 
 -- Just subtract the intersection point by the sphere center
-computeNormal (Sphere c _) p = normalize (p - c)
+computeNormal (Sphere c _) p = p - c
 
 -- Triangles also have a uniform normal.
 -- The edges are v1 -> v2, v2 -> v3, v3 -> v1 (positive orientation)
 -- so we use the cross product of the first two edges.
-computeNormal (Triangle v1 v2 v3) _ = normalize $ (v2 - v1) `cross` (v3 - v2)
+computeNormal (Triangle v1 v2 v3) _ = (v2 - v1) `cross` (v3 - v2)
 
 
 

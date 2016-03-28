@@ -3,6 +3,7 @@
 
 module Ray.Cast where
 
+import           Ray.Affine
 import           Ray.Geometry
 import           Ray.Intersection
 import           Ray.Scene
@@ -54,9 +55,11 @@ computeColor scene r@(Ray rayOrigin rayDir) =
         -- The position along the ray and object of the closest intersection
         (t, obj, m) = minimumBy (comparing (\(a,_,_) -> a)) intersects
 
+        Ray virtualOrigin virtualDir = invertRay (transform obj) r
         intersectPosition = rayOrigin + (t .* rayDir)
+        virtualPosition   = virtualOrigin + (t .* virtualDir)
 
-        lighting = computeLighting scene r intersectPosition obj m
+        lighting = computeLighting scene r intersectPosition virtualPosition obj m
 
     in if null intersects
            then backgroundColor $ colorDetails scene -- No intersections, so return background color
@@ -66,13 +69,18 @@ computeColor scene r@(Ray rayOrigin rayDir) =
 -- Uses lights and material to compute the pixel color.
 -- Takes a scene, the originating ray, the point of intersection,
 -- the object intersected, and any intersection metadata.
-computeLighting :: Intersector i => Scene i -> Ray -> V3 -> Object -> IntersectionMetaData Object -> RGBPixel
-computeLighting scene viewRay pos (Obj eitherShapeMesh material) metaData =
+computeLighting :: Intersector i =>
+                   Scene i -> Ray ->
+                   V3 -> V3 -> Object ->
+                   IntersectionMetaData Object -> RGBPixel
+computeLighting scene viewRay pos untransPos (Obj eitherShapeMesh material tr) metaData =
     let -- the direction from the point of intersection to the camera
         eyeDir    = negate $ getRayDir viewRay
 
-        -- the normal direction at the point of intersection
-        normalDir = getObjectNormal eitherShapeMesh pos metaData
+        -- the normal direction at the point of intersection on the untransformed object
+        untransNormal = getUnnormalizedObjectNormal eitherShapeMesh untransPos metaData
+        normalDir     = normalize $ invertNormal tr untransNormal
+
 
         -- The colors of the intersected object
         (RGB diffuseColor, RGB specularColor) = getColorsFromMaterial material
@@ -81,6 +89,8 @@ computeLighting scene viewRay pos (Obj eitherShapeMesh material) metaData =
         visibleLights = filter (isVisible pos $ objs scene) (lights scene)
 
         colorDs       = colorDetails scene
+        ambientCoeff  = ambientCoefficient colorDs
+        ambientIntens = ambientIntensity colorDs
         diffuseCoeff  = diffuseCoefficient colorDs
         specularCoeff = specularCoefficient colorDs
         specularExp   = diffuseCoefficient colorDs
@@ -106,7 +116,9 @@ computeLighting scene viewRay pos (Obj eitherShapeMesh material) metaData =
 
                           in result
 
-        clampedColor = clampV (V 0 0 0) (V 1 1 1) rawColor
+        unclamped = (1 + ambientCoeff*ambientIntens) .* rawColor
+
+        clampedColor = clampV (V 0 0 0) (V 1 1 1) unclamped
         out = RGB clampedColor
 
     in out

@@ -151,11 +151,12 @@ retrieveVerticesForFace verts (Face i1 i2 i3) = (verts ! i1, verts ! i2, verts !
   where (!) = Vector.unsafeIndex
 {-# INLINE retrieveVerticesForFace #-}
 
--- Retrieves the normal vector for a Face in a Mesh
+-- Retrieves the normal vector for a Face in a Mesh.
+-- Does not need to be normalized.
 getFaceNormal :: Vector V3 -> Face -> V3
 getFaceNormal verts face =
     let (v1, v2, v3) = retrieveVerticesForFace verts face
-    in normalize $ (v2 - v1) `cross` (v3 - v2)
+    in (v2 - v1) `cross` (v3 - v2)
 
 
 

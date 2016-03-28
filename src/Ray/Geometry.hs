@@ -10,6 +10,13 @@ data V3 = V {-# UNPACK #-} !Double
             {-# UNPACK #-} !Double
           deriving (Eq, Ord, Show)
 
+-- A 3D vector coupled with a homogeneous coordinate
+data V4 = V4 {-# UNPACK #-} !Double
+             {-# UNPACK #-} !Double
+             {-# UNPACK #-} !Double
+             {-# UNPACK #-} !Double
+          deriving (Eq, Ord, Show)
+
 -- Multiplication by a scalar
 (.*) :: Double -> V3 -> V3
 k .* v = V k k k * v
