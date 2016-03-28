@@ -43,15 +43,15 @@ main = do setupDataDirectory
       floorPlane = planeFromUnitNormalAndPoint (V 0 1 0) (V 0 0 0)
       floorObj = Obj (Left floorPlane) floorMat $ mkAffine []
 
-      littleNumSpheres = 6
+      littleNumSpheres = 5
 
       spheres = map (\p -> Obj sph (cl p) (trn p)) pts
         where rng = [1 .. littleNumSpheres]
               sph = Left $ Sphere (V 0 0 0) 1
-              pts = [V x y 0 | x <- rng, y <- rng]
+              pts = [V x 0 z | x <- rng, z <- rng]
               trn p = mkAffine [translateA p, scaleA 0.5]
-              cl (V x y z)| x + y > 20 = matFromColor red
-                          | y + y > 11 = matFromColor blue
+              cl (V x _ z)| x + z > 20 = matFromColor red
+                          | z + z > 11 = matFromColor blue
                           | otherwise  = matFromColor green
 
       objects = []
@@ -61,9 +61,11 @@ main = do setupDataDirectory
       light3 = PointLight 0.3 $ V 1.1 1 1.45
       light4 = PointLight 0.25 $ V 4.1 1 4.45
       light5 = directionalLight 0.3 $ V 1 0 0
-      lts    = [ light1
-               , light2, light3
-               , light4, light5
+      lts    = [
+                 -- light1
+                 light2
+               -- , light3
+               -- , light4, light5
                ]
 
       colorDeets = ColorDetails {
@@ -77,10 +79,11 @@ main = do setupDataDirectory
 
       scene = Scene objects lts colorDeets
 
-      cam = cam2{ position    = V (littleNumSpheres / 2) (littleNumSpheres / 2) littleNumSpheres
-                , lookAt      = V 0 0 (-1)
-                , up          = V 0 1 0
-                , cellLength  = 0.1
+      cam = cam2{ position    = V (littleNumSpheres / 2) 2 (littleNumSpheres / 2)
+                , lookAt      = V 0 (-1) 0
+                , up          = V 0 0 1
+                , cellLength  = (1.2 * littleNumSpheres) / fromIntegral squareSide
+                , focalLength = 0.1
                 }
 
       squareSide = 512
@@ -94,22 +97,22 @@ main = do setupDataDirectory
              , cellLength  = 6.8 / fromIntegral squareSide
              }
 
-      image1 bunnyMesh =
-        let (len, rng) = (5, [1..len])
-            bunnyScalar = 7
-            bunnyObjs = flip map [V x 0 z | x <- rng, z <- rng] $ \p ->
-                           Obj (Right bunnyMesh) (color p) (xform p)
-            color (V x _ z) = matFromColor (RGB $ V (x / len) (z / len) 0.5)
-            xform v@(V x _ z) = mkAffine [translateA v, rotateA Y deg, scaleA bunnyScalar]
-              where deg = negate $ 10 * (len-z) + 5 * x
+      -- image1 bunnyMesh =
+      --   let (len, rng) = (5, [1..len])
+      --       bunnyScalar = 7
+      --       bunnyObjs = flip map [V x 0 z | x <- rng, z <- rng] $ \p ->
+      --                      Obj (Right bunnyMesh) (color p) (xform p)
+      --       color (V x _ z) = matFromColor (RGB $ V (x / len) (z / len) 0.5)
+      --       xform v@(V x _ z) = mkAffine [translateA v, rotateA Y deg, scaleA bunnyScalar]
+      --         where deg = negate $ 10 * (len-z) + 5 * x
 
-            objs' = octreeFromObjects (floorObj:bunnyObjs)
-            scene' = scene{objs = objs'}
+      --       objs' = octreeFromObjects (floorObj:bunnyObjs)
+      --       scene' = scene{objs = objs'}
 
-        in mkImage "persp" scene' cam2 perspectiveRayGen
+      --   in mkImage "persp" scene' cam2 perspectiveRayGen
 
-      -- image1 _ = mkImage "persp" scene' cam orthographicRayGen
-      --   where scene' = scene{objs = floorObj:spheres}
+      image1 _ = mkImage "persp" scene' cam orthographicRayGen
+        where scene' = scene{objs = floorObj:spheres}
 
 
 -- With all the info, make the image and save it to disk
