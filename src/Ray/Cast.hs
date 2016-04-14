@@ -32,7 +32,8 @@ type RayGenFunc = (Int, Int) -> Camera -> [Ray]
 raycast :: Intersector i =>  Scene i -> Camera -> RayGenFunc -> (Int -> Int -> RGBPixel)
 raycast scene cam@Camera{..} rgf x y =
     let rays   = rgf (x, y) cam
-        colors = map (computeColor scene) rays
+        reflD  = mirrorReflectionDepth . colorDetails $ scene
+        colors = map (computeColor reflD scene) rays
     in averageColors colors
 
 -- Given a bunch of RGBPixels, take the mean value
@@ -42,10 +43,11 @@ averageColors pixels = RGB . average $ map unRGB pixels
 average :: (Fractional a, Num a) => [a] -> a
 average xs = sum xs / fromIntegral (length xs)
 
--- Given a Scene with objects and lights, and a ray, compute the
+-- Given a Scene with objects and lights, a ray,
+-- and a mirror reflection depth, compute the
 -- color such a Ray would get
-computeColor :: Intersector i => Scene i -> Ray -> RGBPixel
-computeColor scene r@(Ray rayOrigin rayDir) =
+computeColor :: Intersector i => Int -> Scene i -> Ray -> RGBPixel
+computeColor reflDepth scene r@(Ray rayOrigin rayDir) =
     let -- These objects intersected the ray.
         -- It is a list of pairs of where on the ray there was an intersection
         -- and which object intersected it
@@ -59,23 +61,26 @@ computeColor scene r@(Ray rayOrigin rayDir) =
         intersectPosition = rayOrigin + (t .* rayDir)
         virtualPosition   = virtualOrigin + (t .* virtualDir)
 
-        lighting = computeLighting scene r intersectPosition virtualPosition obj m
+        lighting = computeLighting reflDepth scene r intersectPosition virtualPosition obj m
+        directLt = computeLighting 0         scene r intersectPosition virtualPosition obj m
 
     in if null intersects
            then backgroundColor $ colorDetails scene -- No intersections, so return background color
            else case material obj of
-                    Emissive -> white    -- Don't bother with emissive materials
-                    _        -> lighting
+                    Emissive     -> white    -- Don't bother with emissive materials
+                    SolidColor{} -> directLt
+                    _            -> lighting
 
 
 -- Uses lights and material to compute the pixel color.
 -- Takes a scene, the originating ray, the point of intersection,
--- the object intersected, and any intersection metadata.
+-- the object intersected, any intersection metadata, and the
+-- mirror reflection depth
 computeLighting :: Intersector i =>
-                   Scene i -> Ray ->
+                   Int -> Scene i -> Ray ->
                    V3 -> V3 -> Object ->
                    IntersectionMetaData Object -> RGBPixel
-computeLighting scene viewRay pos untransPos (Obj eitherShapeMesh material tr) metaData =
+computeLighting reflDepth scene viewRay pos untransPos (Obj eitherShapeMesh material tr) metaData =
     let -- the direction from the point of intersection to the camera
         eyeDir    = negate $ getRayDir viewRay
 
@@ -95,7 +100,7 @@ computeLighting scene viewRay pos untransPos (Obj eitherShapeMesh material tr) m
         specularExp   = diffuseCoefficient colorDs
 
         -- Sum together all the remaining lights
-        rawColor = sum $ over (lights scene) $ \light ->
+        nonAmbDirect = sum $ over (lights scene) $ \light ->
                           let values = over (getLightRays light pos) $ \(t, lightRay) ->
                                            let lightDir       = getRayDir lightRay
                                                reflectedDir   = lightDir `reflectedOver` normalDir
@@ -122,8 +127,16 @@ computeLighting scene viewRay pos untransPos (Obj eitherShapeMesh material tr) m
                           in average values
 
         ambientLightComp = ambientCoeff .* ambientIntens
+        directLt = ambientLightComp + nonAmbDirect
 
-        unclamped = ambientLightComp + rawColor
+       -- Now to compute indirect lighting
+        reflDir     = eyeDir `reflectedOver` normalDir
+        indirectRec = unRGB $ computeColor (reflDepth-1) scene (ray pos' reflDir)
+          where pos' = pos + 1e-10 .* reflDir
+        indirectLt  = reflComponent material * (if reflDepth > 0 then indirectRec else V 0 0 0)
+
+
+        unclamped = directLt + indirectLt
 
         clampedColor = clampV (V 0 0 0) (V 1 1 1) unclamped
         out = RGB clampedColor

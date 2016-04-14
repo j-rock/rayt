@@ -54,6 +54,12 @@ data Material = SolidColor {
                 , specularColor :: RGBPixel
                 }
               | Emissive -- always comes up as white
+              | Reflective {
+                  diffuseColor  :: RGBPixel
+                , specularColor :: RGBPixel
+                , reflectColor  :: RGBPixel
+                , reflectCoeff  :: Double
+                }
               deriving (Eq, Ord, Show)
 
 -- Light sources
@@ -63,12 +69,13 @@ data Light = DirectionalLight RGBPixel V3 -- a color and a direction
            deriving (Show)
 
 data ColorDetails = ColorDetails {
-                      backgroundColor     :: RGBPixel
-                    , ambientCoefficient  :: Double
-                    , ambientIntensity    :: RGBPixel
-                    , diffuseCoefficient  :: Double
-                    , specularCoefficient :: Double
-                    , specularExponent    :: Double
+                      backgroundColor       :: RGBPixel
+                    , ambientCoefficient    :: Double
+                    , ambientIntensity      :: RGBPixel
+                    , diffuseCoefficient    :: Double
+                    , specularCoefficient   :: Double
+                    , specularExponent      :: Double
+                    , mirrorReflectionDepth :: Int
                     } deriving (Show)
 
 -- Smart constructor
@@ -155,6 +162,7 @@ getUnnormalizedObjectNormal (Right (Mesh vs _ )) _   (Just face) = getFaceNormal
 getColorsFromMaterial :: Material -> (RGBPixel, RGBPixel)
 getColorsFromMaterial SolidColor{..} = (diffuseColor, specularColor)
 getColorsFromMaterial Emissive       = (white, white)
+getColorsFromMaterial Reflective{..} = (diffuseColor, specularColor)
 
 -- Gets unnormalized Rays from a Light and a target point
 -- where the Ray origin is used for calculating visibility
@@ -186,3 +194,7 @@ lightDistanceSquared (AreaLight        _ _ shape) p = areaDistanceSquared shape 
 
 octreeFromObjects :: [Object] -> Octree Object
 octreeFromObjects = octreeFromList ()
+
+reflComponent :: Material -> V3
+reflComponent Reflective{..} = reflectCoeff .* (unRGB reflectColor)
+reflComponent _              = V 0 0 0
