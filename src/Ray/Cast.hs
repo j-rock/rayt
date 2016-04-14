@@ -8,7 +8,6 @@ import           Ray.Geometry
 import           Ray.Intersection
 import           Ray.Scene
 
-
 import           Data.List    (minimumBy)
 import           Data.Ord     (comparing)
 
@@ -38,9 +37,10 @@ raycast scene cam@Camera{..} rgf x y =
 
 -- Given a bunch of RGBPixels, take the mean value
 averageColors :: [RGBPixel] -> RGBPixel
-averageColors pixels = RGB (theSum / numPixels)
-  where theSum    = sum $ map (\(RGB v) -> v) pixels
-        numPixels = fromIntegral (length pixels)
+averageColors pixels = RGB . average $ map unRGB pixels
+
+average :: (Fractional a, Num a) => [a] -> a
+average xs = sum xs / fromIntegral (length xs)
 
 -- Given a Scene with objects and lights, and a ray, compute the
 -- color such a Ray would get
@@ -63,7 +63,9 @@ computeColor scene r@(Ray rayOrigin rayDir) =
 
     in if null intersects
            then backgroundColor $ colorDetails scene -- No intersections, so return background color
-           else lighting
+           else case material obj of
+                    Emissive -> white    -- Don't bother with emissive materials
+                    _        -> lighting
 
 
 -- Uses lights and material to compute the pixel color.
@@ -85,38 +87,43 @@ computeLighting scene viewRay pos untransPos (Obj eitherShapeMesh material tr) m
         -- The colors of the intersected object
         (RGB diffuseColor, RGB specularColor) = getColorsFromMaterial material
 
-        -- Keep only those lights unobstructed by objects
-        visibleLights = filter (isVisible pos $ objs scene) (lights scene)
-
         colorDs       = colorDetails scene
         ambientCoeff  = ambientCoefficient colorDs
-        ambientIntens = ambientIntensity colorDs
+        ambientIntens = unRGB $ ambientIntensity colorDs
         diffuseCoeff  = diffuseCoefficient colorDs
         specularCoeff = specularCoefficient colorDs
         specularExp   = diffuseCoefficient colorDs
 
         -- Sum together all the remaining lights
-        rawColor = sum $ over visibleLights $ \light ->
-                          let -- The direction from the intersection point to the light
-                              lightDir     = getLightDir light pos
-                              reflectedDir = lightDir `reflectedOver` normalDir
-                              cosThetaL    = max 0 $ normalDir .*. lightDir
+        rawColor = sum $ over (lights scene) $ \light ->
+                          let values = over (getLightRays light pos) $ \(t, lightRay) ->
+                                           let lightDir       = getRayDir lightRay
+                                               reflectedDir   = lightDir `reflectedOver` normalDir
+                                               cosThetaL      = max 0 $ normalDir .*. lightDir
 
-                              lightIntensity = cosThetaL * getLightIntensity light
+                                               lightIntensity = cosThetaL .* (unRGB . getLightIntensity) light
 
-                              diffuseComponent  = (diffuseCoeff / pi) .* diffuseColor
-                              specularComponent = let dotProd = max 0 $ reflectedDir .*. eyeDir
-                                                      powered = dotProd ** specularExp
-                                                      specd   = specularCoeff * powered
-                                                  in specd .* specularColor
+                                               diffuseComponent  = (diffuseCoeff / pi) .* diffuseColor
+                                               specularComponent = let dotProd = max 0 $ reflectedDir .*. eyeDir
+                                                                       powered = dotProd ** specularExp
+                                                                       specd   = specularCoeff * powered
+                                                                   in specd .* specularColor
 
-                              lightComponent = lightIntensity / lightDistanceSquared light pos
+                                               lightComponent = lightIntensity /. lightDistanceSquared light pos
 
-                              result = lightComponent .* (diffuseComponent + specularComponent)
+                                               result = lightComponent * (diffuseComponent + specularComponent)
 
-                          in result
+                                               obstructed = not $ isVisibleLightRay t lightRay $ objs scene
 
-        unclamped = (1 + ambientCoeff*ambientIntens) .* rawColor
+                                           in if obstructed
+                                              then V 0 0 0 -- no light contribution from this ray
+                                              else result
+
+                          in average values
+
+        ambientLightComp = ambientCoeff .* ambientIntens
+
+        unclamped = ambientLightComp + rawColor
 
         clampedColor = clampV (V 0 0 0) (V 1 1 1) unclamped
         out = RGB clampedColor
@@ -126,15 +133,9 @@ computeLighting scene viewRay pos untransPos (Obj eitherShapeMesh material tr) m
 over :: [a] -> (a -> b) -> [b]
 over = flip map
 
--- Given a point in space, and all the objects in a scene, can a given
--- Light actually illuminate that point in space?
-isVisible :: Intersector i => V3 -> i Object -> Light -> Bool
-isVisible p objs (DirectionalLight _ dir) = isRayUnobstructedByT p (negate dir) 1e10 objs
-isVisible p objs (PointLight       _ pos) = isRayUnobstructedByT pos lightDir t objs
-  where objectToLightDir = pos - p
-        distance = magnitude objectToLightDir
-        lightDir = objectToLightDir *. (1 / distance)
-        t        = distance - 1e-9
+
+isVisibleLightRay :: Intersector i => Double -> Ray -> i Object -> Bool
+isVisibleLightRay t (Ray start dir) = isRayUnobstructedByT start dir t
 
 -- Takes a starting position, a direction, and finds if there are any collisions
 -- in the Scene up until a certain point (a distance along the ray)

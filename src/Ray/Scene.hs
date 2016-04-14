@@ -1,8 +1,10 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Ray.Scene where
 
 import           Ray.Affine
+import           Ray.AreaLightShape
 import           Ray.Geometry
 import           Ray.Intersection
 import           Ray.Mesh
@@ -11,7 +13,7 @@ import           Ray.Shape
 import           Data.Word (Word8)
 
 -- Simple triplet that contains Red, Green, and Blue components -- Each component will range between [0, 1]
-data RGBPixel = RGB V3 deriving (Eq, Ord, Show)
+newtype RGBPixel = RGB { unRGB :: V3 } deriving (Eq, Ord, Show)
 
 toRGBPixel :: RGBPixel -> (Word8, Word8, Word8)
 toRGBPixel (RGB (V r g b)) = (rip r, rip g, rip b)
@@ -46,30 +48,44 @@ black = rgb 0 0 0
 white :: RGBPixel
 white = rgb 1 1 1
 
--- Materials for objects (right now just solid colors)
+-- Materials for objects
 data Material = SolidColor {
                   diffuseColor  :: RGBPixel
                 , specularColor :: RGBPixel
                 }
+              | Emissive -- always comes up as white
               deriving (Eq, Ord, Show)
 
 -- Light sources
-data Light = DirectionalLight Double V3 -- an intensity and a direction
-           | PointLight Double V3 -- an intensity and a position
-           deriving (Eq, Ord, Show)
+data Light = DirectionalLight RGBPixel V3 -- a color and a direction
+           | PointLight RGBPixel V3 -- a color and a position
+           | AreaLight RGBPixel Int AreaLightShape -- a color, num samples, and a region
+           deriving (Show)
 
 data ColorDetails = ColorDetails {
                       backgroundColor     :: RGBPixel
                     , ambientCoefficient  :: Double
-                    , ambientIntensity    :: Double
+                    , ambientIntensity    :: RGBPixel
                     , diffuseCoefficient  :: Double
                     , specularCoefficient :: Double
                     , specularExponent    :: Double
                     } deriving (Show)
 
 -- Smart constructor
-directionalLight :: Double -> V3 -> Light
-directionalLight intensity dir = DirectionalLight intensity (normalize dir)
+directionalLight :: Double -> RGBPixel -> V3 -> Light
+directionalLight intensity color dir = DirectionalLight color' (normalize dir)
+  where color' = RGB (intensity .* unRGB color)
+
+-- Smart constructor
+pointLight :: Double -> RGBPixel -> V3 -> Light
+pointLight intensity color pos = PointLight color' pos
+  where color' = RGB (intensity .* unRGB color)
+
+-- Smart constructor
+areaLight :: Double -> RGBPixel -> Int -> AreaLightShape -> Light
+areaLight intensity color = AreaLight color'
+  where color' = RGB (intensity .* unRGB color)
+
 
 type InternalGeometry = Either Shape Mesh
 -- Something in the scene with a given 3D geometry and material
@@ -137,21 +153,35 @@ getUnnormalizedObjectNormal (Right (Mesh vs _ )) _   (Just face) = getFaceNormal
 
 -- Convenience function to rip out diffuse and specular colors
 getColorsFromMaterial :: Material -> (RGBPixel, RGBPixel)
-getColorsFromMaterial m = (diffuseColor m, specularColor m)
+getColorsFromMaterial SolidColor{..} = (diffuseColor, specularColor)
+getColorsFromMaterial Emissive       = (white, white)
 
--- Retrieves the direction of Light given the point of intersection
-getLightDir :: Light -> V3 -> V3
-getLightDir (DirectionalLight _ dir) _ = negate dir -- DirectionalLight is constant
-getLightDir (PointLight       _ pos) p = normalize $ pos - p
+-- Gets unnormalized Rays from a Light and a target point
+-- where the Ray origin is used for calculating visibility
+-- and the magnitude is the "length" of the light path
+getLightRays :: Light -> V3 -> [(Double, Ray)]
+getLightRays (DirectionalLight _ dir) p = [(1e10, Ray p (negate dir))]
+getLightRays (PointLight       _ pos) p = [(dist-1e-9, Ray p (d /. dist))]
+  where d    = pos - p
+        dist = magnitude d
+getLightRays (AreaLight       _ k sh) p =
+    let rayOrigins = getSamplePoints k sh
+    in flip map rayOrigins $ \pos ->
+         let d    = pos - p
+             dist = magnitude d
+         in (dist-1e-9, Ray p (d /. dist))
 
-getLightIntensity :: Light -> Double
-getLightIntensity (DirectionalLight i _) = i
-getLightIntensity (PointLight       i _) = i
+
+getLightIntensity :: Light -> RGBPixel
+getLightIntensity (DirectionalLight i _  ) = i
+getLightIntensity (PointLight       i _  ) = i
+getLightIntensity (AreaLight        i _ _) = i
 
 -- Given a Light and a point of intersection, what is the squared radius of distance?
 lightDistanceSquared :: Light -> V3 -> Double
-lightDistanceSquared (DirectionalLight _ _  ) _ = 1 -- so that there is no attenuation
-lightDistanceSquared (PointLight       _ pos) p = let v = (pos - p) in v .*. v
+lightDistanceSquared (DirectionalLight _ _      ) _ = 1 -- so that there is no attenuation
+lightDistanceSquared (PointLight       _ pos    ) p = let v = (pos - p) in v .*. v
+lightDistanceSquared (AreaLight        _ _ shape) p = areaDistanceSquared shape p
 
 
 octreeFromObjects :: [Object] -> Octree Object

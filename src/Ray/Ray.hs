@@ -2,6 +2,7 @@
 -- other programs only have to import module Ray
 module Ray
     ( module Ray.Affine
+    , module Ray.AreaLightShape
     , module Ray.Cast
     , module Ray.Geometry
     , module Ray.Intersection
@@ -13,6 +14,7 @@ module Ray
     ) where
 
 import           Ray.Affine
+import           Ray.AreaLightShape
 import           Ray.Cast
 import           Ray.Geometry
 import           Ray.Intersection

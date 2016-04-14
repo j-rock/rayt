@@ -10,6 +10,7 @@ module Ray.Affine
     , invertRay
     , invertNormal
     , mkAffine
+    , noAffineTrans
     ) where
 
 import Ray.Geometry
@@ -112,3 +113,6 @@ invertRay ab (Ray (V ox oy oz) (V dx dy dz)) =
 invertNormal :: AffineBijection -> V3 -> V3
 invertNormal ab (V x y z) = invert' ab $ V4 x y z 0
 {-# INLINE invertNormal #-}
+
+noAffineTrans :: AffineBijection
+noAffineTrans = mkAffine []

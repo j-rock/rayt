@@ -27,6 +27,11 @@ k .* v = V k k k * v
 (*.) = flip (.*)
 {-# INLINE (*.) #-}
 
+-- Division by a scalar
+(/.) :: V3 -> Double -> V3
+(V x y z) /. k = V (x / k) (y / k) (z / k)
+{-# INLINE (/.) #-}
+
 -- Dot product
 (.*.) :: V3 -> V3 -> Double
 (V xl yl zl) .*. (V xr yr zr) = xl*xr + yl*yr + zl*zr
@@ -49,7 +54,7 @@ sqrMagnitude (V x y z) = x*x + y*y + z*z
 
 -- Normalize vector to unit length
 normalize :: V3 -> V3
-normalize v = (1 / magnitude v) .* v
+normalize v = v /. magnitude v
 {-# INLINE normalize #-}
 
 -- Normalize vector to specific length
