@@ -19,7 +19,7 @@ source-repository head
   type: git
   location: git://github.com/j-rock/rayt.git
 
-executable MP3
+executable MP4
   default-language:    Haskell2010
 
   -- Fast execution
@@ -32,7 +32,7 @@ executable MP3
   -- ghc-options:         -O2 -rtsopts -threaded -eventlog "-with-rtsopts=-N7 -ls -H2G"
 
   hs-source-dirs:      exec-src
-  main-is:             Mp3.hs
+  main-is:             Mp4.hs
   build-depends:
     base               >= 4.7 && < 5,
     async              >= 2.1 && < 2.2,

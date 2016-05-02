@@ -108,3 +108,20 @@ ray pos dir = Ray pos (normalize dir)
 
 getRayDir :: Ray -> V3
 getRayDir (Ray _ dir) = dir
+
+getUVBasisForNormal :: V3 -> (V3, V3)
+getUVBasisForNormal n@(V a b c) =
+    let u1 = V (-b)   a  0
+        u2 = V (-c)   0  a
+        u3 = V   0  (-c) b
+
+        u' = if isZero c
+             then u1
+             else if isZero b
+                  then u2
+                  else u3
+
+        u = normalize u'
+        v = n `cross` u
+
+    in (u, v)

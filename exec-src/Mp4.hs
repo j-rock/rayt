@@ -32,64 +32,70 @@ main = do setupDataDirectory
           say $ "Creating data directory: " ++ dataDir
           Dir.createDirectoryIfMissing False dataDir
 
-      -- floorC   = RGB $ V 0.449 0.597 0.84375
-      floorC   = RGB $ V 0.1 0.1 0.1
-      floorMat = Reflective floorC floorC white 0.3
-      greenM   = SolidColor (RGB $ V 1 0.4 0) (RGB $ V 0.1 0.1 0)
-      redMat   = Reflective red red white 0.3
+      checker c1 c2 u v =
+          let k = 15
+              m = cos (k * u) + cos (k * v)
+          in if m > 0 then c1 else c2
 
-      -- emissive = Emissive
+      floorC   = RGB $ V 0.449 0.597 0.84375 *. 1.5
+      floorMat = Texture (checker black white) (checker floorC white)
+      mat1     = Transparent {
+                   diffuseColor      = black
+                 , specularColor     = white
+                 , refractiveIndex   = 1.52
+                 , transmissionCoeff = 0.8
+                 }
+      mat2     = Texture (checker black red) (checker red black)
+      mat3     = Reflective{
+                   diffuseColor  = black
+                 , specularColor = white
+                 , reflectColor  = white
+                 , reflectCoeff  = 0.3
+                 , glossyFactor  = 15.5
+                 , numRays       = 40
+                 }
 
       makeShapeObj = Obj . Left
 
       floorPlane = planeFromNormalAndPoint (V 0 1 0) (V 0 0 0)
       floorObj = makeShapeObj floorPlane floorMat noAffineTrans
 
-      sphereSh = Sphere (V 0 0 0) 1
-      sphere1 = makeShapeObj sphereSh redMat $ mkAffine [translateA (V 0 1.4 0)]
-      sphere2 = makeShapeObj sphereSh greenM $ mkAffine [translateA (V 3 3 2), rotateA X 15, scaleA (V 0.3 0.3 0.2)]
-
+      sphereSh = Sphere (V 0 0 0) 0.95
+      sphere1 = makeShapeObj sphereSh mat1 $ mkAffine [translateA (V 2 1.4 0)]
+      sphere2 = makeShapeObj sphereSh mat2 $ mkAffine [translateA (V 0 1.4 0)]
+      sphere3 = makeShapeObj sphereSh mat3 $ mkAffine [translateA (V 1 1.4 (-2))]
 
       objects = [
                   floorObj
                 , sphere1
                 , sphere2
+                , sphere3
                 ]
 
-
-      light1 = directionalLight 0.2 white $ V 0 (-1) 0
-      light2 = directionalLight 0.7 white $ V (-1) 0 0
-      light3 = directionalLight 0.7 white $ V 1 0 0
-      light4 = pointLight 1.0 white $ V 0 0.1 0
-      light5 = areaLight 1.0 white 20 $ Rect3D (V 1.4 1 (-0.7)) (V 0 0 0.1) (V 0 0.1 0)
-      light6 = areaLight 4.0 white 20 $ Rect3D (V 0.7 1 3.4) (V (-1) 0 0) (V 0 1 0)
-      light7 = areaLight 10.0 white 20 $ Rect3D (V 1.4 5 (-0.7)) (V 0 0 1) (V 1 0 0)
+      light7 = areaLight 20.0 white 10 $ Rect3D (V 1.4 5 (-0.7)) (V 0 0 1) (V 1 0 0)
+      light8 = areaLight 20.0 white 10 $ Rect3D (V 1 1.1 3) (V 1 0 0) (V 0 1 0)
       lts    = [
-               --   light1
-               -- , light2
-               -- , light3
-                 light5
-               , light6
-               , light7
+                 light7
+               , light8
                ]
 
       colorDeets = ColorDetails {
-                     backgroundColor       = RGB (V 0.5 0.5 0.5)
+                     backgroundColor       = RGB (V 0.6 0.2 0.9)
                    , ambientCoefficient    = 0.009
-                   , ambientIntensity      = white -- RGB (V 1 0.7 0.7)
+                   , ambientIntensity      = white
                    , diffuseCoefficient    = 0.8
                    , specularCoefficient   = 0.2
-                   , specularExponent      = 20
-                   , mirrorReflectionDepth = 1
+                   , specularExponent      = 6
+                   , reflectionDepth       = 6
                    }
 
 
       scene = mkScene $ Scene objects lts colorDeets
 
 
-      squareSide = 400
-      camPos   = V 3 3 (-3)
-      lookinAt = V 1.6 1.3 0
+      squareSide = 500
+      camPos   = V 5 3.4 (-5)
+      lookinAt = V 1 1.4 0
       maxWidth = 5
       upV      = let V x y  z = lookAt cam
                      y'       = negate $ (x*x + z*z) / y
@@ -98,7 +104,7 @@ main = do setupDataDirectory
               position    = camPos
             , lookAt      = normalize $ lookinAt - camPos
             , up          = upV
-            , focalLength = 1
+            , focalLength = 2.2
             , width       = squareSide
             , height      = squareSide
             , cellLength  = maxWidth / fromIntegral squareSide

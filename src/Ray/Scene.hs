@@ -59,8 +59,19 @@ data Material = SolidColor {
                 , specularColor :: RGBPixel
                 , reflectColor  :: RGBPixel
                 , reflectCoeff  :: Double
+                , glossyFactor  :: Double
+                , numRays       :: Int
                 }
-              deriving (Eq, Ord, Show)
+              | Texture {
+                  diffuseColorF  :: Double -> Double -> RGBPixel
+                , specularColorF :: Double -> Double -> RGBPixel
+                }
+              | Transparent {
+                  diffuseColor      :: RGBPixel
+                , specularColor     :: RGBPixel
+                , refractiveIndex   :: Double
+                , transmissionCoeff :: Double
+                }
 
 -- Light sources
 data Light = DirectionalLight RGBPixel V3 -- a color and a direction
@@ -75,7 +86,7 @@ data ColorDetails = ColorDetails {
                     , diffuseCoefficient    :: Double
                     , specularCoefficient   :: Double
                     , specularExponent      :: Double
-                    , mirrorReflectionDepth :: Int
+                    , reflectionDepth       :: Int
                     } deriving (Show)
 
 -- Smart constructor
@@ -85,7 +96,7 @@ directionalLight intensity color dir = DirectionalLight color' (normalize dir)
 
 -- Smart constructor
 pointLight :: Double -> RGBPixel -> V3 -> Light
-pointLight intensity color pos = PointLight color' pos
+pointLight intensity color = PointLight color'
   where color' = RGB (intensity .* unRGB color)
 
 -- Smart constructor
@@ -100,7 +111,7 @@ data Object = Obj {
                 geometry  :: InternalGeometry
               , material  :: Material
               , transform :: AffineBijection
-              } deriving (Show)
+              }
 
 instance IntersectObj Object where
   type IntersectionMetaData Object = Maybe Face
@@ -157,12 +168,21 @@ getUnnormalizedObjectNormal (Left  shape)        pos _           = computeNormal
 getUnnormalizedObjectNormal (Right _    )        _   Nothing     = V 1 0 0 -- Impossible case
 getUnnormalizedObjectNormal (Right (Mesh vs _ )) _   (Just face) = getFaceNormal vs face
 
+getObjectUV :: InternalGeometry -> V3 -> IntersectionMetaData Object -> (Double, Double)
+getObjectUV (Left  shape)        pos _           = getShapeUV shape pos
+getObjectUV (Right _    )        _   Nothing     = (0, 0) -- impossible case
+getObjectUV (Right (Mesh vs _ )) pos (Just face) =
+    let (v1, v2, v3) = retrieveVerticesForFace vs face
+    in getShapeUV (Triangle v1 v2 v3) pos
+
 
 -- Convenience function to rip out diffuse and specular colors
 getColorsFromMaterial :: Material -> (RGBPixel, RGBPixel)
-getColorsFromMaterial SolidColor{..} = (diffuseColor, specularColor)
-getColorsFromMaterial Emissive       = (white, white)
-getColorsFromMaterial Reflective{..} = (diffuseColor, specularColor)
+getColorsFromMaterial SolidColor{..}  = (diffuseColor, specularColor)
+getColorsFromMaterial Reflective{..}  = (diffuseColor, specularColor)
+getColorsFromMaterial Transparent{..} = (diffuseColor, specularColor)
+getColorsFromMaterial Emissive{}      = (white, white)
+getColorsFromMaterial _               = (black, black)
 
 -- Gets unnormalized Rays from a Light and a target point
 -- where the Ray origin is used for calculating visibility
@@ -196,5 +216,17 @@ octreeFromObjects :: [Object] -> Octree Object
 octreeFromObjects = octreeFromList ()
 
 reflComponent :: Material -> V3
-reflComponent Reflective{..} = reflectCoeff .* (unRGB reflectColor)
-reflComponent _              = V 0 0 0
+reflComponent Reflective{..}  = reflectCoeff .* unRGB reflectColor
+reflComponent _               = V 0 0 0
+
+isReflective :: Material -> Bool
+isReflective Reflective{..} = True
+isReflective _              = False
+
+isTransparent :: Material -> Bool
+isTransparent Transparent{..} = True
+isTransparent _               = False
+
+transmitComponent :: Material -> Double
+transmitComponent Transparent{..} = transmissionCoeff
+transmitComponent _               = 0

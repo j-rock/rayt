@@ -126,3 +126,29 @@ getShapeBounds (Triangle (V x1 y1 z1) (V x2 y2 z2) (V x3 y3 z3)) =
         maxV = V (maximum [x1,x2,x3]) (maximum [y1,y2,y3]) (maximum [z1,z2,z3])
 
     in Bounds minV maxV
+
+-- U,V coordinates for a given position on a shape
+-- #419begin
+--   #type=1
+--   #src=http://stackoverflow.com/questions/18663755/how-to-convert-a-3d-point-on-a-plane-to-uv-coordinates
+-- #419end
+getShapeUV :: Shape -> V3 -> (Double, Double)
+getShapeUV (Plane n _) p =
+    let (u, v) = getUVBasisForNormal n
+    in (u .*. p, v .*. p)
+
+
+
+-- #419begin
+--   #type=3
+--   #src=https://en.wikipedia.org/wiki/UV_mapping
+-- #419end
+getShapeUV (Sphere c _) p =
+    let V x y z = normalize $ (p - c)
+        u = 0.5 + atan2 z x
+        v = 0.5 - asin y
+    in (u, v)
+
+getShapeUV (Triangle v1 v2 v3) p =
+    let triPlane = planeFromNormalAndPoint (v2 - v1 `cross` v3 - v2) v1
+    in getShapeUV triPlane p
