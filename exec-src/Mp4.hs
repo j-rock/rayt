@@ -38,45 +38,55 @@ main = do setupDataDirectory
           in if m > 0 then c1 else c2
 
       floorC   = RGB $ V 0.449 0.597 0.84375 *. 1.5
-      floorMat = Texture (checker black white) (checker floorC white)
-      mat1     = Transparent {
-                   diffuseColor      = black
-                 , specularColor     = white
-                 , refractiveIndex   = 1.52
-                 , transmissionCoeff = 0.8
-                 }
-      mat2     = Texture (checker black red) (checker red black)
-      mat3     = Reflective{
-                   diffuseColor  = black
-                 , specularColor = white
-                 , reflectColor  = white
-                 , reflectCoeff  = 0.3
-                 , glossyFactor  = 15.5
-                 , numRays       = 40
-                 }
+      floorMat = Reflective white white white 1.0 100.0 10
+
+      mat1 = SolidColor white white
+      mat2 = SolidColor white white
+      mat3 = SolidColor white white
+      husk = SolidColor black black
+      orn  = SolidColor r r
+        where r = RGB $ V 1.0 0.25 0.13671875
+
 
       makeShapeObj = Obj . Left
 
       floorPlane = planeFromNormalAndPoint (V 0 1 0) (V 0 0 0)
       floorObj = makeShapeObj floorPlane floorMat noAffineTrans
 
-      sphereSh = Sphere (V 0 0 0) 0.95
-      sphere1 = makeShapeObj sphereSh mat1 $ mkAffine [translateA (V 2 1.4 0)]
-      sphere2 = makeShapeObj sphereSh mat2 $ mkAffine [translateA (V 0 1.4 0)]
-      sphere3 = makeShapeObj sphereSh mat3 $ mkAffine [translateA (V 1 1.4 (-2))]
+      sphereSh = Sphere (V 0 0 0) 1
+      sphere1 = makeShapeObj sphereSh mat1 $ mkAffine [ translateA (V 0 0.5      0)]
+      sphere2 = makeShapeObj sphereSh mat2 $ mkAffine [ translateA (V 0 1.833333 0)
+                                                      , scaleA (2.01 / 3.0)
+                                                      ]
+      sphere3 = makeShapeObj sphereSh mat3 $ mkAffine [ translateA (V 0 2.91666 0)
+                                                      , scaleA 0.51
+                                                      ]
+      sphere4 = makeShapeObj sphereSh husk $ mkAffine [ translateA (V (-0.2) 3.11666 0.45)
+                                                      , scaleA 0.05
+                                                      ]
+      sphere5 = makeShapeObj sphereSh husk $ mkAffine [ translateA (V (0.2) 3.11666 0.45)
+                                                      , scaleA 0.05
+                                                      ]
+      sphere6 = makeShapeObj sphereSh orn $ mkAffine [ translateA (V 0 3.11666 0.45)
+                                                      , scaleA $ V 0.05 0.05 0.8
+                                                      ]
 
       objects = [
                   floorObj
                 , sphere1
                 , sphere2
                 , sphere3
+                , sphere4
+                , sphere5
+                , sphere6
                 ]
 
+      light1 = directionalLight 3.0 white (V 0 (-0.5) (-1.0))
       light7 = areaLight 20.0 white 10 $ Rect3D (V 1.4 5 (-0.7)) (V 0 0 1) (V 1 0 0)
       light8 = areaLight 20.0 white 10 $ Rect3D (V 1 1.1 3) (V 1 0 0) (V 0 1 0)
       lts    = [
-                 light7
-               , light8
+                 light1
+               -- , light8
                ]
 
       colorDeets = ColorDetails {
@@ -86,7 +96,7 @@ main = do setupDataDirectory
                    , diffuseCoefficient    = 0.8
                    , specularCoefficient   = 0.2
                    , specularExponent      = 6
-                   , reflectionDepth       = 6
+                   , reflectionDepth       = 1
                    }
 
 
@@ -94,9 +104,9 @@ main = do setupDataDirectory
 
 
       squareSide = 500
-      camPos   = V 5 3.4 (-5)
-      lookinAt = V 1 1.4 0
-      maxWidth = 5
+      camPos   = V 1.001 6.4 5
+      lookinAt = V 0 1.0 0
+      maxWidth = 2
       upV      = let V x y  z = lookAt cam
                      y'       = negate $ (x*x + z*z) / y
                  in  normalize $ V x y' z
@@ -110,7 +120,7 @@ main = do setupDataDirectory
             , cellLength  = maxWidth / fromIntegral squareSide
             }
 
-      image1 = mkImage "scene" scene cam orthographicRayGen
+      image1 = mkImage "scene" scene cam (multiJitteredRayGen 3)
 
 
 -- With all the info, make the image and save it to disk
